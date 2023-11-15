@@ -1,7 +1,7 @@
 ; ****************************************************************************
 ; PLAYWAV.ASM - ICH AC97 .wav player for DOS.			   PLAYWAV.COM
 ; ----------------------------------------------------------------------------
-; Last Update: 12/11/2023 (Previous: 08/11/2023)
+; Last Update: 15/11/2023 (Previous: 12/11/2023)
 ; ----------------------------------------------------------------------------
 ; Beginning: 17/02/2017
 ; ----------------------------------------------------------------------------
@@ -445,9 +445,10 @@ gsr_stc:
 	stc
 	jmp	short gsr_retn
 
-%include 'ac97.asm' ; 29/11/2016 (AC97 codec configuration)
+;%include 'ac97.asm' ; 29/11/2016 (AC97 codec configuration)
+%include 'ac97_vra.asm' ; 13/11/2023 (AC97 codec configuration)
 ;%include 'ich_wav.asm' ; 17/02/2017 (ICH AC97 wav playing functions)
-%include 'ich_wave.asm' ; 11/11/2023 (ICH AC97 wav playing functions)
+%include 'ich_wav3.asm' ; 13/11/2023 (ICH AC97 wav playing functions)
 
 ; UTILS.ASM
 ;----------------------------------------------------------------------------
