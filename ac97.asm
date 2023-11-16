@@ -1,3 +1,4 @@
+; 13/11/2023
 ; 12/11/2023
 ; 11/11/2023
 ; 06/11/2023
@@ -224,6 +225,9 @@ init_ac97_codec_err1:
 init_ac97_codec_err2:
 	retn
 
+	; 13/11/2023
+VRA:	db 1	
+
 codecConfig:
 	; 04/11/2023
 	; 17/02/2017 
@@ -350,10 +354,14 @@ check_vra:
 	; 11/11/2023
 	loop	check_vra
 
+	; 13/11/2023
+	mov	byte [VRA], 0
+	jmp	short skip_rate	
+
 	; 12/11/2023
-	pop	ax ; discard return address to the caller
-	mov	dx, msg_no_vra
-	jmp	vra_err
+	;pop	ax ; discard return address to the caller
+	;mov	dx, msg_no_vra
+	;jmp	vra_err
 
 set_rate:
 	mov	ax, [sample_rate] ; 17/02/2017 (Erdogan Tan)
