@@ -13,8 +13,11 @@ playwav5.asm, PLAYWAV4.COM (included asm files: ich_wav5.asm, ac97_vra.asm, ac97
 Recognized AC'97 Audio Controllers: ICH0 to ICH7, NFORCE, NFORCE2, NFORCE3, CK804 etc.  ((non-VRA codec example: ALC650 with CK804))
 
 PLAYWAV2 music -wav file- play Method: tuneloop, double/2 (half) buffer switch/swap method, PCM OUT CIV-LVI and STatus reg handling.
+
 PLAYWAV3 music -wav file- play Method: AC97 Interrupt (BCI), double/2 (half) buffer -switch/swap- method.
+
 PLAYWAV4 music -wav file- play Method: tuneloop, software frequency conversion for non-VRA codecs (ALC650) ...
+
 PLAYWAV5 music -wav file- play Method: AC97 Interrupt (LVBI), software frequency conversion for non-VRA codecs (ALC650) ...
 
 The program displays active (in use) buffer as '1' or '2' (on the top left corner of the screen with red color) while playing music ('1' and '2' continuously changes) and waits for a keypress (int 16h, ah=01h) to stop/exit before the end of the WAV file (it will play all of the audio samples and then it will exit/return at the end of the WAV file if the user does not press any key before).
