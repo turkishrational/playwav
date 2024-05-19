@@ -8,7 +8,7 @@ playwav3.asm, PLAYWAV3.COM (included asm files: ich_wav3.asm, ac97_vra.asm, ac97
 playwav4.asm, PLAYWAV4.COM (included asm files: ich_wav4.asm, ac97_vra.asm, ac97.inc) -plays WAV files via AC97 CODECs including non-VRA codecs-
 playwav5.asm, PLAYWAV4.COM (included asm files: ich_wav5.asm, ac97_vra.asm, ac97.inc) -plays WAV files via AC97 CODECs including non-VRA codecs-
 
-(VRA: Variable Rate Audio Frequency, 8 to 48 kHZ audio playinmg ... non-VRA codec: Ony 48000 kHZ audio playing)
+(VRA: Variable Rate Audio, 8 to 48 kHZ audio playinmg ... non-VRA codec: Ony 48000 kHZ audio playing)
 
 Recognized AC'97 Audio Controllers: ICH0 to ICH7, NFORCE, NFORCE2, NFORCE3, CK804 etc.  ((non-VRA codec example: ALC650 with CK804 controller))
 
