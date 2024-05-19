@@ -5,11 +5,11 @@ Full Functional -complete- 16 bit (real mode) DOS Program (in 11/2023):
 
 playwav2.asm, PLAYWAV2.COM (included asm files: ich_wav.asm, ac97.asm, ac97.inc) ((plays WAV files via AC97 CODECs with VRA feature))
 
-playwav3.asm, PLAYWAV3.COM (included asm files: ich_wav3.asm, ac97_vra.asm, ac97.inc) ((plays WAV files via AC97 CODECs, VRA or non-VRA))
+playwav3.asm, PLAYWAV3.COM (included asm files: ich_wav3.asm, ac97_vra.asm, ac97.inc) ((plays WAV files via VRA and non-VRA codecs))
 
-playwav4.asm, PLAYWAV4.COM (included asm files: ich_wav4.asm, ac97_vra.asm, ac97.inc) ((plays WAV files via AC97 CODECs, VRA or non-VRA))
+playwav4.asm, PLAYWAV4.COM (included asm files: ich_wav4.asm, ac97_vra.asm, ac97.inc) ((plays WAV files via VRA and non-VRA codecs))
 
-playwav5.asm, PLAYWAV4.COM (included asm files: ich_wav5.asm, ac97_vra.asm, ac97.inc) ((plays WAV files via AC97 CODECs, VRA or non-VRA))
+playwav5.asm, PLAYWAV4.COM (included asm files: ich_wav5.asm, ac97_vra.asm, ac97.inc) ((plays WAV files via VRA and non-VRA codecs))
 
 
 (VRA: Variable Rate Audio, 8 to 48 kHZ audio playing ... non-VRA codec: Ony 48000 kHZ audio playing)
