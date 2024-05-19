@@ -10,7 +10,7 @@ playwav5.asm, PLAYWAV4.COM (included asm files: ich_wav5.asm, ac97_vra.asm, ac97
 
 (VRA: Variable Rate Audio, 8 to 48 kHZ audio playing ... non-VRA codec: Ony 48000 kHZ audio playing)
 
-Recognized AC'97 Audio Controllers: ICH0 to ICH7, NFORCE, NFORCE2, NFORCE3, CK804 etc.  ((non-VRA codec example: ALC650 with CK804 controller))
+Recognized AC'97 Audio Controllers: ICH0 to ICH7, NFORCE, NFORCE2, NFORCE3, CK804 etc.  ((non-VRA codec example: ALC650 with CK804))
 
 PLAYWAV2 music -wav file- playing Method: tuneloop, double/2 (half) buffer -switch/swap- method, PCM OUT CIV-LVI and STatus register handling.
 PLAYWAV3 music -wav file- playing Method: AC97 Interrupt (BCI), double/2 (half) buffer -switch/swap- method, PCM OUT CIV-LVI and STatus register handling.
