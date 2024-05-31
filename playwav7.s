@@ -5,7 +5,7 @@
 ;
 ; 29/05/2024
 ;
-; [ Last Modification: 30/05/2024 ]
+; [ Last Modification: 31/05/2024 ]
 ;
 ; Modified from PLAYWAV6.PRG .wav player program by Erdogan Tan, 27/11/2023
 ; Modified from PLAYWAV4.COM .wav player program by Erdogan Tan, 19/05/2024
@@ -196,9 +196,9 @@ _gsr_2:
 	; 29/05/2024
 	call	write_ac97_pci_dev_info
 
+	; 31/05/2024
 	; 30/05/2024
-	; 29/05/2024
-	call	check_vra
+	;call	check_vra
 
 	; 30/05/2024
 	call	codecConfig		; unmute codec, set rates.
@@ -596,12 +596,14 @@ _0:
 	mov	ah, 5	; write port dword
 	int	34h
 
+	; 31/05/2024
 	; 19/05/2024
 	;call	delay1_4ms
 
         mov	al, 31
 	call	setLastValidIndex
 
+	; 31/05/2024
 	; 19/05/2024
 	;call	delay1_4ms
 
@@ -620,7 +622,7 @@ _0:
 
 	; 19/05/2024
 	; 06/11/2023
-	;call	delay1_4ms
+	;call	delay1_4ms	; 31/05/2024
 	;call	delay1_4ms
 	;call	delay1_4ms
 	;call	delay1_4ms
@@ -1260,8 +1262,10 @@ write_ac97_pci_dev_info:
 	; DEV/VENDOR
 	;	DDDDDDDDDDDDDDDDVVVVVVVVVVVVVVVV
 
-	mov	esi, [dev_vendor]
-	mov	eax, esi
+	;mov	esi, [dev_vendor]
+	;mov	eax, esi
+	; 31/05/2024
+	mov	eax, [dev_vendor]
 	movzx	ebx, al
 	mov	dl, bl
 	and	bl, 0Fh
@@ -1300,9 +1304,12 @@ write_ac97_pci_dev_info:
 	mov	al, [ebx+hex_chars]
 	mov	[msgDevId], al
 
-	mov	esi, [bus_dev_fn]
-	shr	esi, 8
-	mov	ax, si
+	;mov	esi, [bus_dev_fn]
+	;shr	esi, 8
+	;mov	ax, si
+	; 31/05/2024
+	mov	eax, [bus_dev_fn]
+	shr	eax, 8
 	mov	bl, al
 	mov	dl, bl
 	and	bl, 7 ; bit 0,1,2
@@ -1370,7 +1377,8 @@ write_ac97_pci_dev_info:
 	mov	al, [ebx+hex_chars]
 	mov	[msgNabmBar], al
 
-	xor	ah, ah
+	;xor	ah, ah
+	xor	eax, eax ; 31/05/2024
 	mov	al, [ac97_int_ln_reg]
 	mov	cl, 10
 	div	cl
@@ -1536,8 +1544,9 @@ lff32_3:
 lff44_3:
 lff22_3:
 lff11_3:
-	mov	ecx, [buffersize] ; 16 bit (48 kHZ, stereo) sample size
-	shl	ecx, 1	; byte count
+	; 31/05/2024 (BugFix)
+	mov	ecx, [buffersize] ; buffer size in bytes
+	;shl	ecx, 1 ; Bug !
 	sub	ecx, edi
 	jna	short lff8m_4
 	;inc	ecx
@@ -1545,6 +1554,9 @@ lff11_3:
 	xor	eax, eax ; fill (remain part of) buffer with zeros	
 	rep	stosd
 lff8m_4:
+	; 31/05/2024 (BugFix)
+	; cf=1 ; Bug !
+	clc
 	retn
 
 lff8_eof:
@@ -4689,7 +4701,7 @@ _initc_1:
 	int	34h
 
 	; 19/05/2024
-	call	delay1_4ms
+	;call	delay1_4ms
 
 	cmp	eax, 0FFFFFFFFh ; -1
 	jne	short _initc_3
@@ -4697,6 +4709,7 @@ _initc_2:
 	dec	ebp
 	jz	short _ac97_codec_ready
 
+	; 31/05/2024
 	call	delay_100ms
 	jmp	short _initc_1
 _initc_3:
@@ -4724,8 +4737,9 @@ _ac97_codec_ready:
 	int	34h
 	pop	ebx
 
+	; 31/05/2024
 	; 29/05/2024
-	call	delay_100ms
+	;call	delay_100ms
 
 	; 19/11/2023
 	or	ebp, ebp
@@ -4751,18 +4765,21 @@ _ac97_codec_ready:
 	;mov	ecx, 40
 _ac97_codec_rloop:
 	;call	delay_100ms
+	; 31/05/2024
+	call	delay1_4ms
 
 	;mov	dx, [NAMBAR]
 	;add	dx, CODEC_REG_POWERDOWN
 	;in	ax, dx
 	; 29/05/2024
-	;in	eax, dx
 	mov	dx, [NAMBAR]
 	add	dx, CODEC_REG_POWERDOWN
-	mov	ah, 1	; read port, word
+	; 31/05/2024
+	mov	ah, 2	; read port, word
 	int	34h
 
-	call	delay1_4ms
+	; 31/05/2024
+	;call	delay1_4ms
 	
 	and	ax, 0Fh
 	cmp	al, 0Fh
@@ -4777,25 +4794,27 @@ init_ac97_codec_err2:
 _ac97_codec_init_ok:
 	call 	reset_ac97_controller
 
+	; 31/05/2024
 	; 30/05/2024
 	; 19/05/2024
 	;call	delay_100ms
 
 	; 30/05/2024
-	call	delay1_4ms
-	call	delay1_4ms
-	call	delay1_4ms
-	call	delay1_4ms
+	;call	delay1_4ms
+	;call	delay1_4ms
+	;call	delay1_4ms
+	;call	delay1_4ms
 
 setup_ac97_codec:
 	; 12/11/2023
 	cmp	word [sample_rate], 48000
-	je	short skip_rate
+	je	skip_rate
 	
+	; 31/05/2024
 	; 30/05/2024
 	; 29/05/2024
-	cmp	byte [VRA], 0
-	jna	short skip_rate
+	;cmp	byte [VRA], 0
+	;jna	short skip_rate
 
 	; 11/11/2023
 	mov	dx, [NAMBAR]
@@ -4808,8 +4827,41 @@ setup_ac97_codec:
 	; 30/05/2024
 	; 19/05/2024
 	call	delay1_4ms
-	
-	and	al, ~BIT1 ; Clear DRA
+
+	;and	al, ~BIT1 ; Clear DRA
+	;;;
+	; 30/05/2024
+	and	al, ~(BIT1+BIT0) ; Clear DRA+VRA
+	;out	dx, ax
+	; 31/05/2024
+	push	ebx
+	mov	ebx, eax
+	mov	dx, [NAMBAR]
+	add	dx, CODEC_EXT_AUDIO_CTRL_REG  	; 2Ah
+	mov	ah, 3 ; write port, word
+	int	34h
+	pop	ebx
+
+	; 31/05/2024
+	call	check_vra
+
+	; 31/05/2024 - temporary (interpolated sample rate test)
+	;mov	byte [VRA], 0
+
+	; 31/05/2024
+	cmp	byte [VRA], 0
+	jna	short skip_rate
+
+	mov	dx, [NAMBAR]
+	add	dx, CODEC_EXT_AUDIO_CTRL_REG  	; 2Ah
+	;in	ax, dx
+	; 31/05/2024
+	mov	ah, 2 ; read port, word
+	int	34h
+
+	;and	al, ~BIT1 ; Clear DRA
+	;;;
+
 	or	al, AC97_EA_VRA ; 1 ; 04/11/2023
 	;out	dx, ax			; Enable variable rate audio
 	; 29/05/2024
@@ -4827,7 +4879,7 @@ setup_ac97_codec:
 	;mov	cx, 10
 	mov	ecx, 10 ; 30/05/2024
 check_vra_loop:
-	; 30/05/2024
+	; 31/05/2024
 	;call	delay_100ms
 	; 30/05/2024
 	call	delay1_4ms
@@ -4866,7 +4918,7 @@ set_rate:
 	; 29/05/2024
 	;call	delay_100ms
 	; 30/05/2024
-	call	delay1_4ms
+	;call	delay1_4ms
 
 	; 12/11/2023
 skip_rate:
@@ -5471,8 +5523,9 @@ stmo:		resb 1 ; stereo or mono (1=stereo)
 bps:		resb 1 ; bits per sample (8,16)
 sample_rate:	resw 1 ; Sample Frequency (Hz)
 
+; 31/05/2024
 ; 25/11/2023
-bufferSize:	resd 1
+;bufferSize:	resd 1
 
 flags:		resb 1
 
