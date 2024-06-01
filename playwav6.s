@@ -1,23 +1,20 @@
 ; ****************************************************************************
-; playwav7.s (for TRDOS 386)
+; playwav6.s (for TRDOS 386)
 ; ----------------------------------------------------------------------------
-; PLAYWAV7.PRG ! AC'97 (ICH) .WAV PLAYER program by Erdogan TAN
+; PLAYWAV6.PRG ! AC'97 (ICH) .WAV PLAYER program by Erdogan TAN
 ;
-; 29/05/2024
+; 25/11/2023
 ;
 ; [ Last Modification: 01/06/2024 ]
 ;
-; Modified from PLAYWAV6.PRG .wav player program by Erdogan Tan, 27/11/2023
-; Modified from PLAYWAV4.COM .wav player program by Erdogan Tan, 19/05/2024
+; Modified from PLAYWAV5.PRG .wav player program by Erdogan Tan, 18/08/2020
 ;
 ; Assembler: NASM version 2.15
-;	     nasm playwav7.s -l playwav7.txt -o PLAYWAV7.PRG	
+;	     nasm playwav6.s -l playwav6.txt -o PLAYWAV6.PRG	
 ; ----------------------------------------------------------------------------
 ; Derived from '.wav file player for DOS' Jeff Leyda, Sep 02, 2002
 
-; tuneloop (user mode) version (29/05/2024
-
-; previous version: playwav6.s (27/11/2023)
+; previous version: playwav3.s (17/06/2017)
 
 ; CODE
 
@@ -93,15 +90,12 @@ _dma	equ 45
 ; TRDOS 386 (and Retro UNIX 386 v1) system call format:
 ; sys systemcall (eax) <arg1 (ebx)>, <arg2 (ecx)>, <arg3 (edx)>
 
-;BUFFERSIZE	equ	32768	; audio buffer size 
+BUFFERSIZE	equ	32768	; audio buffer size 
 ENDOFFILE       equ     1	; flag for knowing end of file
 
 [BITS 32]
 
-[ORG 0]
-
-	; 29/05/2024
-	%include 'ac97.inc' ; 17/02/2017 
+[ORG 0] 
 
 _STARTUP:
 	; Prints the Credits Text.
@@ -120,7 +114,7 @@ _STARTUP:
 	jnc     short GetFileName
 
 _dev_not_ready:
-	; couldn't find the audio device!
+; couldn't find the audio device!
 	sys	_msg, noDevMsg, 255, 0Fh
         jmp     Exit
 
@@ -161,6 +155,32 @@ SetExt:
 	mov	byte [edi+4], 0
 
 _1:
+
+; 26/11/2023
+%if 0
+	; Allocate Audio Buffer (for user)
+	;sys	_audio, 0200h, BUFFERSIZE, audio_buffer
+	; 26/11/2023
+	sys	_audio, 0200h, [buffersize], audio_buffer
+	jnc	short _2
+error_exit:
+	sys	_msg, trdos386_err_msg, 255, 0Eh
+	jmp	Exit
+_2:
+	; DIRECT CGA (TEXT MODE) MEMORY ACCESS
+	; bl = 0, bh = 4
+	; Direct access/map to CGA (Text) memory (0B8000h)
+
+	sys	_video, 0400h
+	cmp	eax, 0B8000h
+	jne	short error_exit
+
+	; Initialize Audio Device (bh = 3)
+	sys	_audio, 0301h, 0, audio_int_handler 
+;	jc	short error_exit
+_3:
+
+%endif
 	call	write_audio_dev_info 
 
 ; open the file
@@ -176,8 +196,9 @@ _exit_:
 _gsr:  
        	call    getSampleRate		; read the sample rate
                                         ; pass it onto codec.
+	;jc	Exit
 	; 25/11/2023
-	jc	short _exit_		; nothing to do
+	jc	short _exit_
 
 	mov	[sample_rate], ax
 	mov	[stmo], cl
@@ -193,16 +214,47 @@ _gsr_1:
 	ja	short _gsr_2 ; 16 bit samples
 	inc	byte [fbs_shift] ; 2 = mono and 8 bit
 _gsr_2:	
-	; 29/05/2024
+	; 06/06/2017
+	sys	_audio, 0E00h ; get audio controller info
+	jc	error_exit ; 25/11/2023
+
+	;cmp	ah, 2 ; ICH ? (Intel AC'97 Audio Controller)
+	;jne	_dev_not_ready	
+
+	; EAX = IRQ Number in AL
+	;	Audio Device Number in AH 
+	; EBX = DEV/VENDOR ID
+	;       (DDDDDDDDDDDDDDDDVVVVVVVVVVVVVVVV)
+	; ECX = BUS/DEV/FN 
+	;       (00000000BBBBBBBBDDDDDFFF00000000)
+	; EDX = NABMBAR/NAMBAR (for AC97)
+	;      (Low word, DX = NAMBAR address)
+	; EDX = Base IO Addr (DX) for SB16 & VT8233
+
+	mov	[ac97_int_ln_reg], al
+	mov	[dev_vendor], ebx
+	mov	[bus_dev_fn], ecx
+	;mov	[ac97_NamBar], dx
+	;shr	dx, 16
+	;mov	[ac97_NabmBar], dx
+	mov	[ac97_NamBar], edx	
+  
+	; 01/06/2024
+	; Reset Audio Device (bh = 8)
+	sys	_audio, 0800h
+	;jc	error_exit	
+	jc	short init_err
+
 	call	write_ac97_pci_dev_info
 
-	; 31/05/2024
-	; 30/05/2024
-	;call	check_vra
-
-	; 30/05/2024
-	call	codecConfig		; unmute codec, set rates.
-	jc	init_err
+	; 01/06/2024
+	; 25/11/2023
+	; Get AC'97 Codec info
+	; (Function 14, sub function 1)
+	sys	_audio, 0E01h
+	; Save Variable Rate Audio support bit
+	and	al, 1
+	mov	[VRA], al
 
 	; 25/11/2023
 	call	write_VRA_info
@@ -220,6 +272,11 @@ playwav_48_khz:
 	;mov	dword [loadfromwavfile], loadFromFile
 	;mov	dword [buffersize], 65536
 	jmp	PlayNow
+
+	; 01/06/2024
+init_err:
+	sys	_msg, msg_init_err, 255, 0Eh
+	jmp	Exit
 
 chk_sample_rate:
 	; set conversion parameters
@@ -407,7 +464,7 @@ buffersize:	; write to DMA buffer
 PlayNow: 
 
 ; 26/11/2023
-%if 0
+%if 1
 	; Allocate Audio Buffer (for user)
 	;sys	_audio, 0200h, BUFFERSIZE, audio_buffer
 	; 26/11/2023
@@ -429,21 +486,13 @@ _2:
 	cmp	eax, 0B8000h
 	jne	short error_exit
 
+	; 01/06/2024
 	; Initialize Audio Device (bh = 3)
 	sys	_audio, 0301h, 0, audio_int_handler 
-;	jc	short error_exit
+	;jc	short error_exit
+	jc	init_err
 _3:
 
-%else
-	; 29/05/2024
-	; playwav4.asm
-_2:	
-	call	check4keyboardstop	; flush keyboard buffer
-	jc	short _2		; 07/11/2023
-
- 	;call	codecConfig		; unmute codec, set rates.
-	; 11/11/2023
-	;jc	short init_err
 %endif
 
 ;
@@ -462,25 +511,12 @@ _2:
 
 	sys	_msg, nextline, 255, 07h ; 01/05/2017
 
-	; 29/05/2024
-	; ----
-	; DIRECT CGA (TEXT MODE) MEMORY ACCESS
-	; bl = 0, bh = 4
-	; Direct access/map to CGA (Text) memory (0B8000h)
-
-	sys	_video, 0400h
-	cmp	eax, 0B8000h
-	jne	short error_exit
-	; ----
-
 ; play the .wav file. Most of the good stuff is in here.
 
-	call    PlayWav
+        call    PlayWav
 
 ; close the .wav file and exit.
 
-; 29/05/2024
-%if 0
 StopPlaying:
 	; Stop Playing
 	sys	_audio, 0700h
@@ -490,8 +526,6 @@ StopPlaying:
 	sys	_audio, 0A00h
 	; Disable Audio Device
 	sys	_audio, 0C00h
-%endif
-
 Exit:  
         call    closeFile
          
@@ -503,218 +537,13 @@ pmsg_usage:
 	sys	_msg, msg_usage, 255, 0Bh
 	jmp	short Exit
 
-	; 29/05/2024
-init_err:
-	sys	_msg, msg_init_err, 255, 0Fh
-	jmp	short Exit
-
-	; 29/05/2024
-error_exit:
-	sys	_msg, msg_error, 255, 0Eh
-	jmp	short Exit
-
-	; --------------------------------------------
-	
-	; 29/05/2024 (TYRDOS 386, playwav7.s)
-	; ((Modified from playwav4.asm, ich_wav4.asm))
-	; ------------------
-;playwav_vra:
-PlayWav:
-	; create Buffer Descriptor List
-
-	;  Generic Form of Buffer Descriptor
-	;  ---------------------------------
-	;  63   62    61-48    47-32   31-0
-	;  ---  ---  --------  ------- -----
-	;  IOC  BUP -reserved- Buffer  Buffer
-	;		      Length   Pointer
-	;		      [15:0]   [31:0]
-
-	; 29/05/2024
-	; Allocate memory block (33 pages)
-	sys	_alloc, BDL_BUFFER, 33*4096, 0 ; no upper limit
-	jc	short error_exit
-	
-	;mov	esi, eax
-
-	mov	[_bdl_buffer], eax ; BDL_BUFFER physical address 
-
-	add	eax, 4096	; WAVBUFFER_1 physical address
-	mov	ebx, eax
-	;mov	[wav_buffer1], eax
-	;add	eax, 65536	; WAVBUFFER_2 physical address
-	;mov	[wav_buffer2], eax
-
-	mov	edi, BDL_BUFFER
-	mov	ecx, 16
-_0:
-	;mov	eax, WAVBUFFER_1
-	mov	eax, ebx	; WAVBUFFER_1 physical address
-	stosd
-
-	mov	eax, [buffersize]
-	shr	eax, 1 ; buffer size in word
-	or	eax, BUP	; tuneloop (without interrupt)
-	stosd
-
-	;mov	eax, WAVBUFFER_2
-	mov	eax, ebx
-	add	eax, 65536	; WAVBUFFER_2 physical address
-	stosd
-
-	mov	eax, [buffersize]
-	shr	eax, 1 ; buffer size in word
-	or	eax, BUP	; tuneloop (without interrupt)
-	stosd
-
-	loop	_0
-
-	;push	esi
-
-	; load 64k into buffer 1
-	mov	dword [audio_buffer], WAVBUFFER_1
-	call	dword [loadfromwavfile]
-
-	; and 64k into buffer 2
-	mov	dword [audio_buffer], WAVBUFFER_2
-	call	dword [loadfromwavfile]
-
-	;pop	esi
-	
-	; write NABMBAR+10h with offset of buffer descriptor list
-
-       	;;mov	eax, BDL_BUFFER
-        ;mov	eax, esi	; BDL_BUFFER physical address
-
-	mov	eax, [_bdl_buffer] ; BDL_BUFFER physical address
-
-	mov	dx, [NABMBAR]
-        add     dx, PO_BDBAR_REG	; set pointer to BDL
-	;out	dx, eax 		; write to AC97 controller
-	; 29/05/2024
-	mov	ebx, eax ; data, dword
-	mov	ah, 5	; write port dword
-	int	34h
-
-	; 31/05/2024
-	; 19/05/2024
-	;call	delay1_4ms
-
-        mov	al, 31
-	call	setLastValidIndex
-
-	; 31/05/2024
-	; 19/05/2024
-	;call	delay1_4ms
-
-	; 17/02/2017
-        mov	dx, [NABMBAR]
-        add	dx, PO_CR_REG		; PCM out Control Register
-        ;mov	al, IOCE + RPBM	; Enable 'Interrupt On Completion' + run
-	;			; (LVBI interrupt will not be enabled)
-	; 06/11/2023 (TUNELOOP version, without interrupt)
-	mov	al, RPBM
-	;out	dx, al			; Start bus master operation.
-	; 29/05/2024
-	; al = data, byte
-	mov	ah, 1 ; write port, byte
-	int	34h
-
-	; 19/05/2024
-	; 06/11/2023
-	;call	delay1_4ms	; 31/05/2024
-	;call	delay1_4ms
-	;call	delay1_4ms
-	;call	delay1_4ms
-
-; while DMA engine is running, examine current index and wait until it hits 1
-; as soon as it's 1, we need to refresh the data in wavbuffer1 with another
-; 64k. Likewise when it's playing buffer 2, refresh buffer 1 and repeat.
-
-; 18/11/2023
-; 08/11/2023
-; 07/11/2023
-
-tuneLoop:
-	; 18/11/2023 (ich_wav4.asm)
-	; 08/11/2023
-	; 06/11/2023
-	mov	al, '1'
-	call	tL0
-tL1:
-	call	updateLVI	; /set LVI != CIV/
-	jz	short _exitt_	; 08/11/2023
-	call	check4keyboardstop
-	jc	short _exitt_
-	call	getCurrentIndex
-	test	al, BIT0
-	jz	short tL1	; loop if buffer 2 is not playing
-
-	; 29/05/2024
-	; load buffer 1
-	mov	dword [audio_buffer], WAVBUFFER_1
-	call	dword [loadfromwavfile]
-	jc	short _exitt_	; end of file
-
-	mov	al, '2'
-	call	tL0
-tL2:
-	call    updateLVI
-	jz	short _exitt_	; 08/11/2023
-	call    check4keyboardstop
-	jc	short _exitt_
-	call    getCurrentIndex
-	test	al, BIT0
-	jnz	short tL2	; loop if buffer 1 is not playing
-
-	; 29/05/2024
-	; load buffer 2
-	mov	dword [audio_buffer], WAVBUFFER_2
-	call	dword [loadfromwavfile]
-	jnc	short tuneLoop
-_exitt_:
-	mov	dx, [NABMBAR]		
-	add	dx, PO_CR_REG	; PCM out Control Register
-	mov	al, 0
-	;out	dx, al		; stop player
-	; 29/05/2024
-	; al = data, byte
-	mov	ah, 1  ; write port, byte
-	int	34h	
-
-	; 29/05/2024
-	mov	al, '0'
-
-	;add	al, '0'
-	;call	tL0
-	;
-	;retn
-	; 06/11/2023
-	;jmp	short tL0
-	;retn
-
-	; 06/11/2023
-tL0:
-	; 29/05/2024 (TRDOS 386)
-	; 08/11/2023
-	; 05/11/2023
-	; 17/02/2017 - Buffer switch test (temporary)
-	; 06/11/2023
-	; al = buffer indicator ('1', '2' or '0' -stop- )
-	
-	mov	ebx, 0B8000h ; video display page address
-	mov	ah, 4Eh
-	mov	[ebx], ax ; show current play buffer (1, 2)
-	retn
-
-	; ------------------
-
-; 29/05/2024
-%if 0
 	; 25/11/2023
 DetectAC97:
 	; Detect (BH=1) AC'97 (BL=2) Audio Device
         sys	_audio, 0102h
+
+; 01/06/2024
+%if 0
 	jc	short DetectAC97_retn
 
 	; 25/11/2023
@@ -724,71 +553,10 @@ DetectAC97:
 	; Save Variable Rate Audio support bit
 	and	al, 1
 	mov	[VRA], al
+%endif
 
 DetectAC97_retn:
 	retn
-%else
-	; 29/05/2024
-DetectAC97:
-DetectICH:
-	; 22/11/2023
-	; 19/11/2023
-	; 01/11/2023 - TRDOS 386 Kernel v2.0.7
-	;; 10/06/2017
-	;; 05/06/2017
-	;; 29/05/2017
-	;; 28/05/2017
-
-	; 19/11/2023
-	mov	esi, valid_ids	; address of Valid ICH (AC97) Device IDs
-	mov	ecx, valid_id_count
-pfd_1:
-	lodsd
-	call	pciFindDevice
-	jnc	short d_ac97_1
-	loop	pfd_1
-
-	;stc
-	retn
-
-d_ac97_1:
-	; eax = BUS/DEV/FN
-	;	00000000BBBBBBBBDDDDDFFF00000000
-	; edx = DEV/VENDOR
-	;	DDDDDDDDDDDDDDDDVVVVVVVVVVVVVVVV
-
-	; playwav4.asm - 19/05/2024
-
-	mov	[bus_dev_fn], eax
-	mov	[dev_vendor], edx
-
-	; get ICH base address regs for mixer and bus master
-
-        mov     al, NAMBAR_REG
-        call    pciRegRead16			; read PCI registers 10-11
-        ;and    dx, IO_ADDR_MASK 		; mask off BIT0
-	; 19/05/2024
-	and	dl, 0FEh
-
-        mov     [NAMBAR], dx			; save audio mixer base addr
-
-	mov     al, NABMBAR_REG
-        call    pciRegRead16
-        ;and    dx, IO_ADDR_MASK
-	; 19/05/2024
-	and	dl, 0C0h
-
-        mov     [NABMBAR], dx			; save bus master base addr
-
-	mov	al, AC97_INT_LINE ; Interrupt line register (3Ch)
-	call	pciRegRead8 ; 17/02/2017
-
-	mov     [ac97_int_ln_reg], dl
-
-	;clc
-
-	retn
-%endif
 
 ;open or create file
 ;
@@ -867,8 +635,6 @@ gsr_stc:
 	stc
 	jmp	short gsr_retn
 
-; 29/05/2024
-%if 0
 audio_int_handler:
 	; 18/08/2020 (14/10/2020, 'wavplay2.s')
 
@@ -900,7 +666,6 @@ _callback_bsy_retn:
 	sys	_rele ; return from callback service 
 	; we must not come here !
 	sys	_exit
-%endif
 	
 loadFromFile:
 	; 26/11/2023
@@ -913,9 +678,7 @@ lff_0:
 	; 13/06/2017
 	;mov	edx, BUFFERSIZE
 	; 26/11/2023
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	mov	edx, [buffersize]	; bytes
 	mov	cl, [fbs_shift]   
 	and	cl, cl
@@ -930,9 +693,7 @@ lff_0:
 	mov     esi, temp_buffer
 	jmp	short lff_2
 lff_1:
-	;;mov	esi, audio_buffer
-	; 29/05/2024
-	;mov	esi, [audio_buffer]
+	;mov	esi, audio_buffer
 	mov	esi, edi ; audio_buffer
 lff_2:
 	; 17/03/2017
@@ -1025,6 +786,7 @@ lff_11:
 error_exit_2:
 	; 26/11/2023 - temporary
 	;sys	_msg, test_2, 255, 0Ch
+
 	jmp	error_exit
 	
 	; 26/11/2023 - temporary
@@ -1033,9 +795,6 @@ error_exit_2:
 ;test_2:
 ;	db 13, 10, 'Test 2', 13,10, 0
 	
-; 29/05/2024
-%if 0
-
 PlayWav:
 	; 26/11/2023
 	; 18/08/2020 (27/07/2020, 'wavplay2.s')
@@ -1099,7 +858,7 @@ _6:
 	dec	bl
 	or	bl, al
 	mov	cx, [sample_rate] 
-	mov	bh, 4 ; start to play	
+	mov	bh, 4 ; start to play
 	sys	_audio
 
 	;mov	ebx, 0B8000h ; video display page address
@@ -1203,7 +962,6 @@ dec_volume_level:
 	jna	short p_loop
 	dec	cl
 	jmp	short change_volume_level
-%endif
 
 write_audio_dev_info:
 	; EBX = Message address
@@ -1262,10 +1020,8 @@ write_ac97_pci_dev_info:
 	; DEV/VENDOR
 	;	DDDDDDDDDDDDDDDDVVVVVVVVVVVVVVVV
 
-	;mov	esi, [dev_vendor]
-	;mov	eax, esi
-	; 31/05/2024
-	mov	eax, [dev_vendor]
+	mov	esi, [dev_vendor]
+	mov	eax, esi
 	movzx	ebx, al
 	mov	dl, bl
 	and	bl, 0Fh
@@ -1304,12 +1060,9 @@ write_ac97_pci_dev_info:
 	mov	al, [ebx+hex_chars]
 	mov	[msgDevId], al
 
-	;mov	esi, [bus_dev_fn]
-	;shr	esi, 8
-	;mov	ax, si
-	; 31/05/2024
-	mov	eax, [bus_dev_fn]
-	shr	eax, 8
+	mov	esi, [bus_dev_fn]
+	shr	esi, 8
+	mov	ax, si
 	mov	bl, al
 	mov	dl, bl
 	and	bl, 7 ; bit 0,1,2
@@ -1335,8 +1088,7 @@ write_ac97_pci_dev_info:
 	mov	al, [ebx+hex_chars]
 	mov	[msgBusNo], al
 
-	;mov	ax, [ac97_NamBar]
-	mov	ax, [NAMBAR]	; 29/05/2024
+	mov	ax, [ac97_NamBar]
 	mov	bl, al
 	mov	dl, bl
 	and	bl, 0Fh
@@ -1356,8 +1108,7 @@ write_ac97_pci_dev_info:
 	mov	al, [ebx+hex_chars]
 	mov	[msgNamBar], al
 
-	;mov	ax, [ac97_NabmBar]
-	mov	ax, [NABMBAR]	; 29/05/2024
+	mov	ax, [ac97_NabmBar]
 	mov	bl, al
 	mov	dl, bl
 	and	bl, 0Fh
@@ -1377,8 +1128,7 @@ write_ac97_pci_dev_info:
 	mov	al, [ebx+hex_chars]
 	mov	[msgNabmBar], al
 
-	;xor	ah, ah
-	xor	eax, eax ; 31/05/2024
+	xor	ah, ah
 	mov	al, [ac97_int_ln_reg]
 	mov	cl, 10
 	div	cl
@@ -1459,9 +1209,7 @@ lff8m_0:
 	jmp	lff8m_5  ; error !
 
 lff8m_6:
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	and	eax, eax
 	jz	lff8_eof
 
@@ -1544,9 +1292,9 @@ lff32_3:
 lff44_3:
 lff22_3:
 lff11_3:
-	; 31/05/2024 (BugFix)
-	mov	ecx, [buffersize] ; buffer size in bytes
-	;shl	ecx, 1 ; Bug !
+	; 01/06/2024 (BugFix)
+	mov	ecx, [buffersize] ; 16 bit (48 kHZ, stereo) sample size
+	;shl	ecx, 1	; byte count ; Bug !
 	sub	ecx, edi
 	jna	short lff8m_4
 	;inc	ecx
@@ -1554,7 +1302,7 @@ lff11_3:
 	xor	eax, eax ; fill (remain part of) buffer with zeros	
 	rep	stosd
 lff8m_4:
-	; 31/05/2024 (BugFix)
+	; 01/06/2024 (BugFix)
 	; cf=1 ; Bug !
 	clc
 	retn
@@ -1613,9 +1361,7 @@ lff8s_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff8s_5 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jz	short lff8_eof
@@ -1742,9 +1488,7 @@ lff8m2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	lff8m2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff8m2_8
@@ -1831,9 +1575,7 @@ lff8s2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff8s2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 2
 	jnz	short lff8s2_8
@@ -1954,9 +1696,7 @@ lff16m_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff16m_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	and	eax, eax
 	jnz	short lff16m_8
@@ -2030,9 +1770,7 @@ lff16s_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff16s_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff16s_8
@@ -2117,9 +1855,7 @@ lff16m2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff16m2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff16m2_8
@@ -2187,9 +1923,7 @@ lff16s2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff16s2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 2
 	jnz	short lff16s2_8
@@ -2272,9 +2006,7 @@ lff24m_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff24m_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	and	eax, eax
 	jnz	short lff24m_8
@@ -2334,9 +2066,7 @@ lff24s_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff24s_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff24s_8
@@ -2405,9 +2135,7 @@ lff24m2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff24m2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff24m2_8
@@ -2468,9 +2196,7 @@ lff24s2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff24s2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 2
 	jnz	short lff24s2_8
@@ -2539,9 +2265,7 @@ lff32m_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff32m_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	and	eax, eax
 	jnz	short lff32m_8
@@ -2612,9 +2336,7 @@ lff32s_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff32s_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff32s_8
@@ -2698,9 +2420,7 @@ lff32m2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff32m2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff32m2_8
@@ -2771,9 +2491,7 @@ lff32s2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff32s2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 2
 	jnz	short lff32s2_8
@@ -2852,9 +2570,7 @@ lff22m_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff22m_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	and	eax, eax
 	jnz	short lff22m_8
@@ -2926,9 +2642,7 @@ lff22s_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff22s_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff22s_8
@@ -2994,9 +2708,7 @@ lff22m2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff22m2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff22m2_8
@@ -3068,9 +2780,7 @@ lff22s2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff22s2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 2	; dword (left chan word + right chan word)
 	jnz	short lff22s2_8
@@ -3155,9 +2865,7 @@ lff11m_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff11m_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	and	eax, eax
 	jnz	short lff11m_8
@@ -3230,9 +2938,7 @@ lff11s_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff11s_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff11s_8
@@ -3298,9 +3004,7 @@ lff11m2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff11m2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff11m2_8
@@ -3368,9 +3072,7 @@ lff11s2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff11s2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 2	; dword (left chan word + right chan word)
 	jnz	short lff11s2_8
@@ -3467,9 +3169,7 @@ lff44m_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff44m_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	and	eax, eax
 	jnz	short lff44m_8
@@ -3537,9 +3237,7 @@ lff44s_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff44s_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff44s_8
@@ -3604,9 +3302,7 @@ lff44m2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff44m2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 1
 	jnz	short lff44m2_8
@@ -3672,9 +3368,7 @@ lff44s2_0:
 	sys 	_read, [FileHandle], esi, [loadsize]
 	jc	short lff44s2_7 ; error !
 
-	;mov	edi, audio_buffer
-	; 29/05/2024
-	mov	edi, [audio_buffer]
+	mov	edi, audio_buffer
 	
 	shr	eax, 2	; dword (left chan word + right chan word)
 	jnz	short lff44s2_8
@@ -3895,7 +3589,7 @@ interpolating_3_16bit_stereo:
 	mov	ax, [next_val_l]
 	add	ax, bx	; [previous_val_l]
 	rcr	ax, 1
-	xchg	eax, ebx ; ax = [previous_val_l]	
+	xchg	eax, ebx ; ax = [previous_val_l]
 	add	ax, bx	; bx = interpolated middle (L)
 	rcr	ax, 1
 	sub	ah, 80h	; -32768 to +32767 format again
@@ -4417,1009 +4111,27 @@ next_val_r: dw 0
 faz:	db 0	
 	
 ; --------------------------------------------------------
-; 27/05/2024 - (TRDOS 386 Kernel) audio.s
-; --------------------------------------------------------
-
-NOT_PCI32_PCI16	EQU 03FFFFFFFh ; NOT BIT31+BIT30 ; 19/03/2017
-NOT_BIT31 EQU 7FFFFFFFh
-
-pciFindDevice:
-	; 19/11/2023
-	; 03/04/2017 ('pci.asm', 20/03/2017)
-	;
-	; scan through PCI space looking for a device+vendor ID
-	;
-	; Entry: EAX=Device+Vendor ID
-	;
-	; Exit: EAX=PCI address if device found
-	;	EDX=Device+Vendor ID
-	;       CY clear if found, set if not found. EAX invalid if CY set.
-	;
-	; Destroys: ebx, edi ; 19/11/2023
-
-        ; 19/11/2023
-	mov	ebx, eax
-	mov	edi, 80000000h
-nextPCIdevice:
-	mov 	eax, edi		; read PCI registers
-	call	pciRegRead32
-	; 19/11/2023
-	cmp	edx, ebx
-	je	short PCIScanExit	; found
-	; 19/11/2023
-	cmp	edi, 80FFF800h
-	jnb	short pfd_nf		; not found
-	add	edi, 100h
-	jmp	short nextPCIdevice
-pfd_nf:
-	stc
-	retn
-PCIScanExit:
-	;pushf
-	mov	eax, NOT_BIT31 	; 19/03/2017
-	and	eax, edi	; return only bus/dev/fn #
-	retn
-
-pciRegRead:
-	; 03/04/2017 ('pci.asm', 20/03/2017)
-	;
-	; 8/16/32bit PCI reader
-	;
-	; Entry: EAX=PCI Bus/Device/fn/register number
-	;           BIT30 set if 32 bit access requested
-	;           BIT29 set if 16 bit access requested
-	;           otherwise defaults to 8 bit read
-	;
-	; Exit:  DL,DX,EDX register data depending on requested read size
-	;
-	; Note1: this routine is meant to be called via pciRegRead8,
-	;	 pciRegread16 or pciRegRead32, listed below.
-	;
-	; Note2: don't attempt to read 32 bits of data from a non dword
-	;	 aligned reg number. Likewise, don't do 16 bit reads from
-	;	 non word aligned reg #
-	
-	push	ebx
-	push	ecx
-        mov     ebx, eax		; save eax, dh
-        mov     cl, dh
-
-        and     eax, NOT_PCI32_PCI16	; clear out data size request
-        or      eax, BIT31		; make a PCI access request
-        and     al, ~3 ; NOT 3		; force index to be dword
-
-        mov     dx, PCI_INDEX_PORT
-        ;out	dx, eax			; write PCI selector
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax ; data, dword
-	mov	ah, 5 ; write port, dword
-	; dx = port number
-	int	34h
-	pop	ebx
-	
-        mov     dx, PCI_DATA_PORT
-        mov     al, bl
-        and     al, 3			; figure out which port to
-        add     dl, al			; read to
-
-	test    ebx, PCI32+PCI16
-        jnz     short _pregr0
-
-	;in	al, dx			; return 8 bits of data
-	; 29/05/2024
-	mov	ah, 0 ; read port, byte
-	; dx = port number
-	int	34h
-        
-	mov	dl, al
-	mov     dh, cl			; restore dh for 8 bit read
-	jmp	short _pregr2
-_pregr0:	
-	test    ebx, PCI32
-        jnz	short _pregr1
-
-	;in	ax, dx
-	; 29/05/2024
-	mov	ah, 2 ; read port, word
-	; dx = port number
-	int	34h	        
-
-	mov     dx, ax			; return 16 bits of data
-	jmp	short _pregr2
-_pregr1:
-	;in	eax, dx			; return 32 bits of data
-	; 29/05/2024
-	mov	ah, 4 ; read port, dword
-	; dx = port number
-	int	34h
-
-	mov	edx, eax
-_pregr2:
-	mov     eax, ebx		; restore eax
-        and     eax, NOT_PCI32_PCI16	; clear out data size request
-	pop	ecx
-	pop	ebx
-	retn
-
-pciRegRead8:
-        and     eax, NOT_PCI32_PCI16	; set up 8 bit read size
-        jmp     short pciRegRead	; call generic PCI access
-
-pciRegRead16:
-        and     eax, NOT_PCI32_PCI16	; set up 16 bit read size
-        or      eax, PCI16		; call generic PCI access
-        jmp     short pciRegRead
-
-pciRegRead32:
-        and     eax, NOT_PCI32_PCI16	; set up 32 bit read size
-        or      eax, PCI32		; call generic PCI access
-        jmp     pciRegRead
-
-pciRegWrite:
-	; 03/04/2017 ('pci.asm', 29/11/2016)
-	;
-	; 8/16/32bit PCI writer
-	;
-	; Entry: EAX=PCI Bus/Device/fn/register number
-	;           BIT31 set if 32 bit access requested
-	;           BIT30 set if 16 bit access requested
-	;           otherwise defaults to 8bit read
-	;        DL/DX/EDX data to write depending on size
-	;
-	; Note1: this routine is meant to be called via pciRegWrite8, 
-	;	 pciRegWrite16 or pciRegWrite32 as detailed below.
-	;
-	; Note2: don't attempt to write 32bits of data from a non dword
-	;	 aligned reg number. Likewise, don't do 16 bit writes from
-	;	 non word aligned reg #
-
-	push	ebx
-	push	ecx
-        mov     ebx, eax		; save eax, edx
-        mov     ecx, edx
-	and     eax, NOT_PCI32_PCI16	; clear out data size request
-        or      eax, BIT31		; make a PCI access request
-        and     al, ~3 ; NOT 3		; force index to be dword
-
-        mov     dx, PCI_INDEX_PORT
-	;out	dx, eax			; write PCI selector
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax ; data, dword
-	mov	ah, 5 ; write port, dword
-	; dx = port number
-	int	34h
-	pop	ebx
-	
-        mov     dx, PCI_DATA_PORT
-        mov     al, bl
-        and     al, 3			; figure out which port to
-        add     dl, al			; write to
-
-	test    ebx, PCI32+PCI16
-        jnz     short _pregw0
-	mov	al, cl 			; put data into al
-	;out	dx, al
-	; 29/05/2024
-	; al = data, byte
-	mov	ah, 1 ; write port, byte
-	; dx = port number
-	int	34h
-
-	jmp	short _pregw2
-_pregw0:
-	test    ebx, PCI32
-        jnz     short _pregw1
-	mov	ax, cx			; put data into ax
-	;out	dx, ax
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax ; data, word
-	mov	ah, 3 ; write port, word
-	; dx = port number
-	int	34h
-	pop	ebx
-
-	jmp	short _pregw2
-_pregw1:
-	mov	eax, ecx		; put data into eax
-	;out	dx, eax
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax ; data, dword
-	mov	ah, 5 ; write port, dword
-	; dx = port number
-	int	34h
-	pop	ebx
-_pregw2:
-        mov     eax, ebx		; restore eax
-        and     eax, NOT_PCI32_PCI16	; clear out data size request
-        mov     edx, ecx		; restore dx
-	pop	ecx
-	pop	ebx
-	retn
-
-pciRegWrite8:
-        and     eax, NOT_PCI32_PCI16	; set up 8 bit write size
-        jmp	short pciRegWrite	; call generic PCI access
-
-pciRegWrite16:
-        and     eax, NOT_PCI32_PCI16	; set up 16 bit write size
-        or      eax, PCI16		; call generic PCI access
-        jmp	short pciRegWrite
-
-pciRegWrite32:
-        and     eax, NOT_PCI32_PCI16	; set up 32 bit write size
-        or      eax, PCI32		; call generic PCI access
-        jmp	pciRegWrite
-
-; --------------------------------------------------------
-; 19/05/2024 - (playwav4.asm) ac97_vra.asm
-; --------------------------------------------------------
-
-	; 13/11/2023
-
-;VRA:	db 1
-
-codecConfig:
-	; 29/05/2024 (playwav7.s modification)
-	; 19/05/2024
-	; 19/11/2023
-	; 15/11/2023
-	; 04/11/2023
-	; 17/02/2017 
-	; 07/11/2016 (Erdogan Tan)
-
-	;AC97_EA_VRA equ 1
-	AC97_EA_VRA equ BIT0
-
-	; 04/11/2023
-init_ac97_controller:
-	mov	eax, [bus_dev_fn]
-	mov	al, PCI_CMD_REG
-	call	pciRegRead16		; read PCI command register
-	or      dl, IO_ENA+BM_ENA	; enable IO and bus master
-	call	pciRegWrite16
-
-	;call	delay_100ms
-
-	; 19/05/2024
-	; ('PLAYMOD3.ASM', Erdogan Tan, 18/05/2024)
-
-init_ac97_codec:
-	; 18/11/2023
-	mov	ebp, 40
-	; 29/05/2024
-	;mov	ebp, 1000
-_initc_1:
-	; 29/05/2024
-	mov	dx, GLOB_STS_REG ; 30h
-	add	dx, [NABMBAR]
-	;in	eax, dx
-	mov	ah, 4	; read port, dword
-	int	34h
-
-	; 19/05/2024
-	;call	delay1_4ms
-
-	cmp	eax, 0FFFFFFFFh ; -1
-	jne	short _initc_3
-_initc_2:
-	dec	ebp
-	jz	short _ac97_codec_ready
-
-	; 31/05/2024
-	call	delay_100ms
-	jmp	short _initc_1
-_initc_3:
-	test	eax, CTRL_ST_CREADY
-	jnz	short _ac97_codec_ready
-
-	; 30/05/2024
-	cmp	byte [reset], 1
-	jnb	short _initc_2
-
-	call	reset_ac97_codec
-	; 30/05/2024
-	mov	byte [reset], 1
-	; 19/05/2024
-	jmp	short _initc_2
-
-_ac97_codec_ready:
-	mov	dx, [NAMBAR]
-	;add	dx, 0 ; ac_reg_0 ; reset register
-	;out	dx, ax
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax ; bx = data, word
-	mov	ah, 3	; write port, word
-	int	34h
-	pop	ebx
-
-	; 31/05/2024
-	; 29/05/2024
-	;call	delay_100ms
-
-	; 19/11/2023
-	or	ebp, ebp
-	jnz	short _ac97_codec_init_ok
-
-	xor	eax, eax ; 0
-	mov	dx, [NAMBAR]
-	add	dx, CODEC_REG_POWERDOWN
-	;out	dx, ax
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax
-	mov	ah, 3	; write port, word
-	int	34h
-	pop	ebx
-	
-	; 19/11/2023
-	; wait for 1 second
-	; 19/05/2024
-	mov	ecx, 1000 ; 1000*4*0.25ms = 1s
-	;;mov	ecx, 10
-	; 30/05/2024
-	;mov	ecx, 40
-_ac97_codec_rloop:
-	;call	delay_100ms
-	; 31/05/2024
-	call	delay1_4ms
-
-	;mov	dx, [NAMBAR]
-	;add	dx, CODEC_REG_POWERDOWN
-	;in	ax, dx
-	; 29/05/2024
-	mov	dx, [NAMBAR]
-	add	dx, CODEC_REG_POWERDOWN
-	; 31/05/2024
-	mov	ah, 2	; read port, word
-	int	34h
-
-	; 31/05/2024
-	;call	delay1_4ms
-	
-	and	ax, 0Fh
-	cmp	al, 0Fh
-	je	short _ac97_codec_init_ok
-	loop	_ac97_codec_rloop 
-
-init_ac97_codec_err1:
-	;stc	; cf = 1 ; 19/05/2024
-init_ac97_codec_err2:
-	retn
-
-_ac97_codec_init_ok:
-	call 	reset_ac97_controller
-
-	; 31/05/2024
-	; 30/05/2024
-	; 19/05/2024
-	;call	delay_100ms
-
-	; 30/05/2024
-	;call	delay1_4ms
-	;call	delay1_4ms
-	;call	delay1_4ms
-	;call	delay1_4ms
-
-setup_ac97_codec:
-	; 12/11/2023
-	cmp	word [sample_rate], 48000
-	je	skip_rate
-	
-	; 31/05/2024
-	; 30/05/2024
-	; 29/05/2024
-	;cmp	byte [VRA], 0
-	;jna	short skip_rate
-
-	; 11/11/2023
-	mov	dx, [NAMBAR]
-	add	dx, CODEC_EXT_AUDIO_CTRL_REG  	; 2Ah
-	;in	ax, dx
-	; 29/05/2024
-	mov	ah, 2 ; read port, word
-	int	34h
-
-	; 30/05/2024
-	; 19/05/2024
-	call	delay1_4ms
-
-	;and	al, ~BIT1 ; Clear DRA
-	;;;
-	; 30/05/2024
-	and	al, ~(BIT1+BIT0) ; Clear DRA+VRA
-	;out	dx, ax
-	; 31/05/2024
-	push	ebx
-	mov	ebx, eax
-	mov	dx, [NAMBAR]
-	add	dx, CODEC_EXT_AUDIO_CTRL_REG  	; 2Ah
-	mov	ah, 3 ; write port, word
-	int	34h
-	pop	ebx
-
-	; 31/05/2024
-	call	check_vra
-
-	; 31/05/2024 - temporary (interpolated sample rate test)
-	;mov	byte [VRA], 0
-
-	; 31/05/2024
-	cmp	byte [VRA], 0
-	jna	short skip_rate
-
-	mov	dx, [NAMBAR]
-	add	dx, CODEC_EXT_AUDIO_CTRL_REG  	; 2Ah
-	;in	ax, dx
-	; 31/05/2024
-	mov	ah, 2 ; read port, word
-	int	34h
-
-	;and	al, ~BIT1 ; Clear DRA
-	;;;
-
-	or	al, AC97_EA_VRA ; 1 ; 04/11/2023
-	;out	dx, ax			; Enable variable rate audio
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax
-	;
-	; 30/05/2024
-	mov	dx, [NAMBAR]
-	add	dx, CODEC_EXT_AUDIO_CTRL_REG  	; 2Ah
-	;
-	mov	ah, 3 ; write port, word
-	int	34h
-	pop	ebx
-
-	;mov	cx, 10
-	mov	ecx, 10 ; 30/05/2024
-check_vra_loop:
-	; 31/05/2024
-	;call	delay_100ms
-	; 30/05/2024
-	call	delay1_4ms
-
-	; 11/11/2023
-	;in	ax, dx
-	; 29/05/2024
-	mov	dx, [NAMBAR]
-	add	dx, CODEC_EXT_AUDIO_CTRL_REG  	; 2Ah
-	mov	ah, 2 ; read port, word
-	int	34h
-
-	test	al, AC97_EA_VRA ; 1
-	jnz	short set_rate
-
-	; 11/11/2023
-	loop	check_vra_loop
-
-;vra_not_supported:	; 19/05/2024
-	mov	byte [VRA], 0
-	jmp	short skip_rate
-
-set_rate:
-	mov	ax, [sample_rate] ; 17/02/2017 (Erdogan Tan)
-
-	mov    	dx, [NAMBAR]               	
-	add    	dx, CODEC_PCM_FRONT_DACRATE_REG	; 2Ch  	  
-	;out	dx, ax 			; PCM Front/Center Output Sample Rate
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax  ; bx = data, word
-	mov	ah, 3 ; write port, word
-	int	34h
-	pop	ebx
-
-	; 29/05/2024
-	;call	delay_100ms
-	; 30/05/2024
-	;call	delay1_4ms
-
-	; 12/11/2023
-skip_rate:
-	mov	ax, 0202h
-  	mov	dx, [NAMBAR]
-  	add	dx, CODEC_MASTER_VOL_REG	;02h 
-	;out	dx, ax
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax  ; bx = data, word
-	mov	ah, 3 ; write port, word
-	int	34h
-	pop	ebx
-
-	; 29/05/2024
-	;call	delay1_4ms
-	;call	delay1_4ms
-	;call	delay1_4ms
-	;call	delay1_4ms
-
-	mov	ax, 0202h
-  	mov	dx, [NAMBAR]
-  	add	dx, CODEC_PCM_OUT_REG		;18h 
-  	;out	dx, ax
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax  ; bx = data, word
-	mov	ah, 3 ; write port, word
-	int	34h
-	pop	ebx
-
- 	; 29/05/2024
-	;call	delay1_4ms
-	;call	delay1_4ms
-	;call	delay1_4ms
-	;call	delay1_4ms
-
-	; 19/05/2024
-	;clc
-
-        retn
-
-reset_ac97_controller:
-	; 29/05/2024 (TRDOS 386)
-	; 19/05/2024
-	; 11/11/2023
-	; 10/06/2017
-	; 29/05/2017
-	; 28/05/2017
-	; reset AC97 audio controller registers
-	xor	eax, eax
-        mov	dx, PI_CR_REG
-	add	dx, [NABMBAR]
-	;out	dx, al
-	; 29/05/2024
-	; al = data, byte
-	mov	ah, 1 ; write port, byte
-	int	34h
-
-	; 19/05/2024
-	;call	delay1_4ms
-
-        mov     dx, PO_CR_REG
-	add	dx, [NABMBAR]
-	;out	dx, al
-	; 29/05/2024
-	; al = data, byte
-	mov	ah, 1 ; write port, byte
-	int	34h
-
-	; 19/05/2024
-	;call	delay1_4ms
-
-        mov     dx, MC_CR_REG
-	add	dx, [NABMBAR]
-	;out	dx, al
-	; 29/05/2024
-	; al = data, byte
-	mov	ah, 1 ; write port, byte
-	int	34h
-
-	; 19/05/2024
-	;call	delay1_4ms
-
-        mov	al, RR
-        mov	dx, PI_CR_REG
-	add	dx, [NABMBAR]
-	;out	dx, al
-	; 29/05/2024
-	; al = data, byte
-	mov	ah, 1 ; write port, byte
-	int	34h
-
-	; 19/05/2024
-	;call	delay1_4ms
-
-        mov	dx, PO_CR_REG
-	add	dx, [NABMBAR]
-	;out	dx, al
-	; 29/05/2024
-	; al = data, byte
-	mov	ah, 1 ; write port, byte
-	int	34h
-
-	; 19/05/2024
-	;call	delay1_4ms
-
-        mov	dx, MC_CR_REG
-	add	dx, [NABMBAR]
-	;out	dx, al
-	; 29/05/2024
-	; al = data, byte
-	mov	ah, 1 ; write port, byte
-	int	34h
-
-	; 19/05/2024
-	;call	delay1_4ms
-
-	retn
-
-reset_ac97_codec:
-	; 29/05/2024 (TRDOS 386)
-	; 11/11/2023
-	; 28/05/2017 - Erdogan Tan (Ref: KolibriOS, intelac97.asm)
-	mov	dx, GLOB_CNT_REG ; 2Ch
-	add	dx, [NABMBAR]
-	;in	eax, dx
-	; 29/05/2024
-	mov	ah, 4 ; read port, dword
-	int	34h
-
-	;test	eax, 2
-	; 06/08/2022
-	test	al, 2
-	jz	short _r_ac97codec_cold	
-
-	call	warm_ac97codec_reset
-	jnc	short _r_ac97codec_ok
-_r_ac97codec_cold:
-        call	cold_ac97codec_reset
-        jnc	short _r_ac97codec_ok
-	
-	; 16/04/2017
-        ;xor	eax, eax	; timeout error
-       	;stc
-	retn
-
-_r_ac97codec_ok:
-        xor     eax, eax
-        ;mov	al, VIA_ACLINK_C00_READY ; 1
-        inc	al
-	retn
-
-warm_ac97codec_reset:
-	; 29/05/2024 (TRDOS 386)
-	; 11/11/2023
-	; 06/08/2022 - TRDOS 386 v2.0.5
-	; 28/05/2017 - Erdogan Tan (Ref: KolibriOS, intelac97.asm)
-	mov	eax, 6
-	mov	dx, GLOB_CNT_REG ; 2Ch
-	add	dx, [NABMBAR]
-	;out	dx, eax
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax  ; ebx = data, dword
-	mov	ah, 5 ; write port, dword
-	int	34h
-	pop	ebx
-
-	; 30/05/2024
-	mov	ecx, 10	; total 1s
-	; 29/05/2024
-	;mov	ecx, 4000
-_warm_ac97c_rst_wait:
-	; 30/05/2024
-	call	delay_100ms
-
-	mov	dx, GLOB_STS_REG ; 30h
-	add	dx, [NABMBAR]
-	;in	eax, dx
-	; 29/05/2024
-	mov	ah, 4 ; read port, dword
-	int	34h
-
-	test	eax, CTRL_ST_CREADY
-	jnz	short _warm_ac97c_rst_ok
-
-	dec	ecx
-	jnz	short _warm_ac97c_rst_wait
-
-_warm_ac97c_rst_fail:
-        stc
-_warm_ac97c_rst_ok:
-	retn
-
-cold_ac97codec_reset:
-	; 11/11/2023
-	; 06/08/2022 - TRDOS 386 v2.0.5
-	; 28/05/2017 - Erdogan Tan (Ref: KolibriOS, intelac97.asm)
-        mov	eax, 2
-	mov	dx, GLOB_CNT_REG ; 2Ch
-	add	dx, [NABMBAR]
-	;out	dx, eax
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax  ; ebx = data, dword
-	mov	ah, 5 ; write port, dword
-	int	34h
-	pop	ebx
-
-	; 30/05/2024
-	call	delay_100ms 	; wait 100 ms
-	call	delay_100ms 	; wait 100 ms
-	call	delay_100ms 	; wait 100 ms
-	call	delay_100ms 	; wait 100 ms
-
-	; 30/05/2024
-	mov	ecx, 16	; total 20*100 ms = 2s
-	; 29/05/2024
-	;mov	ecx, 16000
-_cold_ac97c_rst_wait:
-	mov	dx, GLOB_STS_REG ; 30h
-	add	dx, [NABMBAR]
-	;in	eax, dx
-	; 29/05/2024
-	mov	ah, 4 ; read port, dword
-	int	34h
-
-	test	eax, CTRL_ST_CREADY
-	jnz	short _cold_ac97c_rst_ok
-
-	; 30/05/2024
-	; 29/05/2024
-	call	delay_100ms
-
-	dec	ecx
-	jnz	short _cold_ac97c_rst_wait
-
-_cold_ac97c_rst_fail:
-        stc
-_cold_ac97c_rst_ok:
-	retn
-
-; 30/05/2024
-%if 1
-check_vra:
-	; 29/05/2024
-	mov	byte [VRA], 1
-
-	; 29/05/2024 - audio.s (TRDOS 386 Kernel) - 27/05/2024
-	; 24/05/2024
-	; 23/05/2024
-	mov	dx, [NAMBAR]
-	add	dx, CODEC_EXT_AUDIO_REG	; 28h
-	;in	ax, dx
-	; 29/05/2024
-	mov	ah, 2 ; read port, word
-	int	34h
-
-	; 30/05/2024
-	; 23/05/2024
-	call	delay1_4ms
-
-	; 29/05/2024
-	test	al, BIT0
-	;test	al, 1 ; BIT0 ; Variable Rate Audio bit
-	jnz	short check_vra_ok
-
-vra_not_supported:
-	; 13/11/2023
-	mov	byte [VRA], 0
-check_vra_ok:
-	retn
-%endif
-
-; --------------------------------------------------------
-
-PORTB		EQU 061h
-REFRESH_STATUS	EQU 010h	; Refresh signal status
-
-delay_100ms:
-	push	ecx
-	mov	ecx, 400  ; 400*0.25ms
-_delay_x_ms:
-	call	delay1_4ms
-        loop	_delay_x_ms
-	pop	ecx
-	retn
-
-delay1_4ms:
-	; 30/05/2024 (TRDOS 386)
-        push    eax 
-        push    ecx
-	push	ebx
-	push	edx
-        mov     ecx, 16			; close enough.
-	;in	al, PORTB
-	; 30/05/2024
-	mov	dx, PORTB
-	mov	ah, 0  ; read port, byte
-	int	34h
-
-	and	al, REFRESH_STATUS
-	;mov	ah, al			; Start toggle state
-	mov	bl, al
-	or	ecx, ecx
-	jz	short _d4ms1
-	inc	ecx			; Throwaway first toggle
-_d4ms1:	
-	;in	al, PORTB		; Read system control port
-	; 30/05/2024
-	mov	dx, PORTB
-	mov	ah, 0  ; read port, byte
-	int	34h
-
-	and	al, REFRESH_STATUS	; Refresh toggles 15.085 microseconds
-	;cmp	ah, al
-	cmp	bl, al
-	je	short _d4ms1		; Wait for state change
-
-	;mov	ah, al			; Update with new state
-	mov	bl, al
-	dec	ecx
-	jnz	short _d4ms1
-
-	pop	edx
-        pop	ebx
-	pop	ecx
-        pop	eax
-        retn
-
-; --------------------------------------------------------
-; 19/05/2024 - (playwav4.asm) ich_wav4.asm
-; --------------------------------------------------------
-
-check4keyboardstop:
-	; 29/05/2024 (TRDOS 386)
-	; 19/05/2024
-	; 08/11/2023
-	; 06/11/2023
-	; 04/11/2023
-	mov	ah, 1
-	;int	16h
-	int	32h	; TRDOS 386
-	;clc
-	jz	short _cksr
-
-	xor	ah, ah
-	;int	16h
-	int	32h	; TRDOS 386
-
-	;;;
-	; 19/05/2024 (change PCM out volume)
-	cmp	al, '+'
-	jne	short p_1
-	
-	mov	al, [volume]
-	cmp	al, 0
-	jna	short p_3
-	dec	al
-	jmp	short p_2
-p_1:
-	cmp	al, '-'
-	jne	short p_4
-
-	mov	al, [volume]
-	cmp	al, 31
-	jnb	short p_3
-	inc	al
-p_2:
-	mov	[volume], al
-	mov	ah, al
-	mov     dx, [NAMBAR]
-  	;add    dx, CODEC_MASTER_VOL_REG
-	add	dx, CODEC_PCM_OUT_REG
-	;out	dx, ax
-	; 29/05/2024
-	push	ebx
-	mov	ebx, eax ; bx = data, word
-	mov	ah, 3 ; write port, word
-	int	34h
-	pop	ebx
-
-	;call	delay1_4ms
-        ;call	delay1_4ms
-        ;call	delay1_4ms
-        ;call	delay1_4ms
-_cksr:		; 19/05/2024
-	clc
-p_3:
-	retn
-p_4:
-	;;;
-;_cskr:	
-	stc
-	retn
-
-; returns AL = current index value
-getCurrentIndex:
-	; 29/05/2024 (TRDOS 386)
-	; 08/11/2023
-	mov	dx, [NABMBAR]
-	add	dx, PO_CIV_REG
-	;in	al, dx
-	; 29/05/2024
-	mov	ah, 0 ; read port, byte
-	int	34h
-uLVI2:	;	06/11/2023
-	retn
-
-updateLVI:
-	; 29/05/2024 (TRDOS 386)
-	; 08/11/2023
-	; 07/11/2023
-	; 06/11/2023
-	mov	dx, [NABMBAR]
-	add	dx, PO_CIV_REG
-	; (Current Index Value and Last Valid Index value)
-	;in	ax, dx
-	; 29/05/2024
-	mov	ah, 2 ; read port, word
-	int	34h
-
-	cmp	al, ah ; is current index = last index ?
-	jne	short uLVI2
-
-	; 08/11/2023	
-	call	getCurrentIndex
- 
-	test	byte [flags], ENDOFFILE
-	;jnz	short uLVI1
-	jz	short uLVI0  ; 08/11/2023
-
-	; 08/11/2023
-	push	eax	; 29/05/2024 (32 bit)
-	mov	dx, [NABMBAR]
-	add	dx, PO_SR_REG  ; PCM out status register
-	;in	ax, dx
-	; 29/05/2024
-	mov	ah, 2 ; read port, word
-	int	34h
-
-	test	al, 3 ; bit 1 = Current Equals Last Valid (CELV)
-		      ; (has been processed)
-		      ; bit 0 = 1 -> DMA Controller Halted (DCH)
-	pop	eax
-	jz	short uLVI1
-uLVI3:
-	xor	eax, eax
-	; zf = 1
-	retn
-uLVI0:
-        ; not at the end of the file yet.
-	dec	al
-	and	al, 1Fh
-uLVI1:
-	;call	setLastValidIndex
-;uLVI2:
-	;retn
-
-;input AL = index # to stop on
-setLastValidIndex:
-	; 29/05/2024 (TRDOS 386)
-	; 08/11/2023
-	mov	dx, [NABMBAR]
-	add	dx, PO_LVI_REG
-        ;out	dx, al
-	; 29/05/2024
-	; al = data, byte
-	mov	ah, 1 ; write port, byte
-	int	34h
-	retn
-
-; 29/05/2024
-; 19/05/2024
-volume: db	02h
-	
-; --------------------------------------------------------
 
 ; DATA
 
 FileHandle:	
 	dd	-1
 
-; 30/05/2024
-reset:	db	0
-
 Credits:
 	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
-	;db	'August 2020.',10,13,0
-	db	'May 2024.',10,13,0
+	;;db	'August 2020.',10,13,0
+	;db	'November 2023.',10,13,0
+	db	'June 2024.', 10,13,0
 	db	'17/06/2017', 10,13,0
 	db	'18/08/2020', 10,13,0
 	db	'27/11/2023', 10,13,0
-	db	'29/05/2024', 10,13,0
+	db	'01/06/2024', 10,13,0
 
 msgAudioCardInfo:
 	db 	'for Intel AC97 (ICH) Audio Controller.', 10,13,0
 
 msg_usage:
-	db	'usage: playwav7 filename.wav',10,13,0 ; 29/05/2024
+	db	'usage: playwav6 filename.wav',10,13,0
 
 noDevMsg:
 	db	'Error: Unable to find AC97 audio device!'
@@ -5428,52 +4140,20 @@ noDevMsg:
 noFileErrMsg:
 	db	'Error: file not found.',10,13,0
 
-msg_error:	; 29/05/2024
 trdos386_err_msg:
 	db	'TRDOS 386 System call error !',10,13,0
 
-; 29/05/2024
-; 11/11/2023
+; 01/06/2024
 msg_init_err:
 	db	10,13
 	db	"AC97 Controller/Codec initialization error !"
-	db	10,13,0 ; 01/06/2024
+	db	10,13,0
 
 ; 25/11/2023
 msg_no_vra:
 	db	10,13
 	db	"No VRA support ! Only 48 kHZ sample rate supported !"
 	db	10,13,0
-
-; 29/05/2024 (TRDOS 386)
-; 17/02/2017
-; Valid ICH device IDs
-
-valid_ids:
-dd	(ICH_DID << 16) + INTEL_VID  	 ; 8086h:2415h
-dd	(ICH0_DID << 16) + INTEL_VID 	 ; 8086h:2425h
-dd	(ICH2_DID << 16) + INTEL_VID 	 ; 8086h:2445h
-dd	(ICH3_DID << 16) + INTEL_VID 	 ; 8086h:2485h
-dd	(ICH4_DID << 16) + INTEL_VID 	 ; 8086h:24C5h
-dd	(ICH5_DID << 16) + INTEL_VID 	 ; 8086h:24D5h
-dd	(ICH6_DID << 16) + INTEL_VID 	 ; 8086h:266Eh
-dd	(ESB6300_DID << 16) + INTEL_VID  ; 8086h:25A6h
-dd	(ESB631X_DID << 16) + INTEL_VID  ; 8086h:2698h
-dd	(ICH7_DID << 16) + INTEL_VID 	 ; 8086h:27DEh
-; 03/11/2023 - Erdogan Tan
-dd	(MX82440_DID << 16) + INTEL_VID  ; 8086h:7195h
-dd	(SI7012_DID << 16)  + SIS_VID	 ; 1039h:7012h
-dd 	(NFORCE_DID << 16)  + NVIDIA_VID ; 10DEh:01B1h
-dd 	(NFORCE2_DID << 16) + NVIDIA_VID ; 10DEh:006Ah
-dd 	(AMD8111_DID << 16) + AMD_VID 	 ; 1022h:746Dh
-dd 	(AMD768_DID << 16)  + AMD_VID 	 ; 1022h:7445h
-dd 	(CK804_DID << 16) + NVIDIA_VID	 ; 10DEh:0059h
-dd 	(MCP04_DID << 16) + NVIDIA_VID	 ; 10DEh:003Ah
-dd 	(CK8_DID << 16) + NVIDIA_VID	 ; 1022h:008Ah
-dd 	(NFORCE3_DID << 16) + NVIDIA_VID ; 10DEh:00DAh
-dd 	(CK8S_DID << 16) + NVIDIA_VID	 ; 10DEh:00EAh
-
-valid_id_count:	equ ($ - valid_ids)>>2 ; 05/11/2023
 
 msgWavFileName:	db 0Dh, 0Ah, "WAV File Name: ",0
 msgSampleRate:	db 0Dh, 0Ah, "Sample Rate: "
@@ -5508,7 +4188,7 @@ msgVRAheader:	db "VRA support: "
 msgVRAyes:	db "YES", 0Dh, 0Ah, 0
 msgVRAno:	db "NO ", 0Dh, 0Ah
 		db "(Interpolated sample rate playing method)"
-		db 0Dh, 0Ah, 0
+		db 0Dh, 0Ah, 0	
 EOF: 
 
 ; BSS
@@ -5523,20 +4203,15 @@ stmo:		resb 1 ; stereo or mono (1=stereo)
 bps:		resb 1 ; bits per sample (8,16)
 sample_rate:	resw 1 ; Sample Frequency (Hz)
 
-; 31/05/2024
 ; 25/11/2023
-;bufferSize:	resd 1
+bufferSize:	resd 1
 
 flags:		resb 1
-
-; 29/05/2024
-;;cbs_busy:	resb 1
-;half_buff:	resb 1
-;srb:		resb 1
-
-; 30/05/2024
+;cbs_busy:	resb 1 
+half_buff:	resb 1
+srb:		resb 1
 ; 18/08/2020
-;volume_level:	resb 1
+volume_level:	resb 1
 ; 25/11/2023
 VRA:		resb 1	; Variable Rate Audio Support Status
 
@@ -5550,40 +4225,14 @@ ac97_int_ln_reg: resb 1
 fbs_shift:	resb 1 ; 26/11/2023
 dev_vendor:	resd 1
 bus_dev_fn:	resd 1
-;ac97_NamBar:	resw 1
-;ac97_NabmBar:	resw 1
-
-; 29/05/2024
-; 17/02/2017
-; NAMBAR:  Native Audio Mixer Base Address Register
-;    (ICH, Audio D31:F5, PCI Config Space) Address offset: 10h-13h
-; NABMBAR: Native Audio Bus Mastering Base Address register
-;    (ICH, Audio D31:F5, PCI Config Space) Address offset: 14h-17h
-NAMBAR:		resw 1			; BAR for mixer
-NABMBAR:	resw 1			; BAR for bus master regs
-
-; 29/05/2024
-audio_buffer:	resd 1
-; 29/05/2024
-_bdl_buffer:	resd 1
-;wav_buffer1:	resd 1
-;wav_buffer2:	resd 1
+ac97_NamBar:	resw 1
+ac97_NabmBar:	resw 1
 
 bss_end:
-
 alignb 4096
-		; 256 byte buffer for descriptor list
-BDL_BUFFER:	resb 256
-
-alignb 4096
-
 ;audio_buffer:	resb BUFFERSIZE ; DMA Buffer Size / 2 (32768)
-; 29/05/2024
 ; 26/11/2023
-;audio_buffer:	resb 65536
-; 29/05/2024
-WAVBUFFER_1:	resb 65536
-WAVBUFFER_2:	resb 65536
+audio_buffer:	resb 65536
 ; 13/06/2017
 ;temp_buffer:	resb BUFFERSIZE
 ; 26/11/2023
