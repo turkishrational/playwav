@@ -1,0 +1,2527 @@
+     1                                  ; ****************************************************************************
+     2                                  ; wavplay3.s (for TRDOS 386)
+     3                                  ; ----------------------------------------------------------------------------
+     4                                  ; WAVPLAY3.PRG ! VIA VT8237R (VT8233) .WAV PLAYER program by Erdogan TAN
+     5                                  ;
+     6                                  ; 17/03/2017
+     7                                  ;
+     8                                  ; [ Last Modification: 01/08/2020 ]
+     9                                  ;
+    10                                  ; Modified from PLAYWAV.PRG .wav player program by Erdogan Tan, 10/03/2017 
+    11                                  ;
+    12                                  ; Derived from source code of 'PLAYER.COM' ('PLAYER.ASM') by Erdogan Tan
+    13                                  ;	      (18/02/2017) 
+    14                                  ; Assembler: NASM version 2.11
+    15                                  ;	     nasm wavplay.asm -l wavplay.txt -o WAVPLAY.PRG	
+    16                                  ; ----------------------------------------------------------------------------
+    17                                  ; Derived from '.wav file player for DOS' Jeff Leyda, Sep 02, 2002
+    18                                  
+    19                                  ; 01/03/2017
+    20                                  ; 16/10/2016
+    21                                  ; 29/04/2016
+    22                                  ; TRDOS 386 system calls (temporary list!)
+    23                                  _ver 	equ 0
+    24                                  _exit 	equ 1
+    25                                  _fork 	equ 2
+    26                                  _read 	equ 3
+    27                                  _write	equ 4
+    28                                  _open	equ 5
+    29                                  _close 	equ 6
+    30                                  _wait 	equ 7
+    31                                  _creat 	equ 8
+    32                                  _link 	equ 9
+    33                                  _unlink	equ 10
+    34                                  _exec	equ 11
+    35                                  _chdir	equ 12
+    36                                  _time 	equ 13
+    37                                  _mkdir 	equ 14
+    38                                  _chmod	equ 15
+    39                                  _chown	equ 16
+    40                                  _break	equ 17
+    41                                  _stat	equ 18
+    42                                  _seek	equ 19
+    43                                  _tell 	equ 20
+    44                                  _mount	equ 21
+    45                                  _umount	equ 22
+    46                                  _setuid	equ 23
+    47                                  _getuid	equ 24
+    48                                  _stime	equ 25
+    49                                  _quit	equ 26	
+    50                                  _intr	equ 27
+    51                                  _fstat	equ 28
+    52                                  _emt 	equ 29
+    53                                  _mdate 	equ 30
+    54                                  _video 	equ 31
+    55                                  _audio	equ 32
+    56                                  _timer	equ 33
+    57                                  _sleep	equ 34
+    58                                  _msg    equ 35
+    59                                  _geterr	equ 36
+    60                                  _fpsave	equ 37
+    61                                  _pri	equ 38
+    62                                  _rele	equ 39
+    63                                  _fff	equ 40
+    64                                  _fnf	equ 41
+    65                                  _alloc	equ 42
+    66                                  _dalloc equ 43
+    67                                  _calbac equ 44
+    68                                  
+    69                                  %macro sys 1-4
+    70                                      ; 29/04/2016 - TRDOS 386 (TRDOS v2.0)	
+    71                                      ; 03/09/2015	
+    72                                      ; 13/04/2015
+    73                                      ; Retro UNIX 386 v1 system call.	
+    74                                      %if %0 >= 2   
+    75                                          mov ebx, %2
+    76                                          %if %0 >= 3    
+    77                                              mov ecx, %3
+    78                                              %if %0 = 4
+    79                                                 mov edx, %4   
+    80                                              %endif
+    81                                          %endif
+    82                                      %endif
+    83                                      mov eax, %1
+    84                                      ;int 30h
+    85                                      int 40h ; TRDOS 386 (TRDOS v2.0)	   
+    86                                  %endmacro
+    87                                  
+    88                                  ; TRDOS 386 (and Retro UNIX 386 v1) system call format:
+    89                                  ; sys systemcall (eax) <arg1 (ebx)>, <arg2 (ecx)>, <arg3 (edx)>
+    90                                  
+    91                                  
+    92                                  [BITS 32]
+    93                                  
+    94                                  [ORG 0] 
+    95                                  
+    96                                  _STARTUP:
+    97                                  	; Prints the Credits Text.
+    98                                  	sys	_msg, Credits, 255, 0Bh
+    98                              <1> 
+    98                              <1> 
+    98                              <1> 
+    98                              <1> 
+    98                              <1>  %if %0 >= 2
+    98 00000000 BB[950A0000]        <1>  mov ebx, %2
+    98                              <1>  %if %0 >= 3
+    98 00000005 B9FF000000          <1>  mov ecx, %3
+    98                              <1>  %if %0 = 4
+    98 0000000A BA0B000000          <1>  mov edx, %4
+    98                              <1>  %endif
+    98                              <1>  %endif
+    98                              <1>  %endif
+    98 0000000F B823000000          <1>  mov eax, %1
+    98                              <1> 
+    98 00000014 CD40                <1>  int 40h
+    99                                  
+   100                                  	; clear bss
+   101 00000016 B9[00000200]            	mov	ecx, EOF
+   102 0000001B BF[FF0B0000]            	mov	edi, bss_start
+   103 00000020 29F9                    	sub	ecx, edi
+   104 00000022 D1E9                    	shr	ecx, 1
+   105 00000024 31C0                    	xor	eax, eax
+   106 00000026 F366AB                  	rep	stosw
+   107                                  
+   108 00000029 E8CB010000              	call    DetectVT8233	; Detect the VT8233 Audio Device
+   109                                  GetFileName:  
+   110 0000002E 89E6                    	mov	esi, esp
+   111 00000030 AD                      	lodsd
+   112 00000031 83F802                  	cmp	eax, 2 ; two arguments 
+   113                                  	       ; (program file name & mod file name)
+   114 00000034 0F828F010000            	jb	pmsg_usage ; nothing to do
+   115                                  
+   116 0000003A AD                      	lodsd ; program file name address 
+   117 0000003B AD                      	lodsd ; mod file name address (file to be read)
+   118 0000003C 89C6                    	mov	esi, eax
+   119 0000003E BF[380C0000]            	mov	edi, wav_file_name
+   120                                  ScanName:       
+   121 00000043 AC                      	lodsb
+   122 00000044 84C0                    	test	al, al
+   123 00000046 0F847D010000            	je	pmsg_usage
+   124 0000004C 3C20                    	cmp	al, 20h
+   125 0000004E 74F3                    	je	short ScanName	; scan start of name.
+   126 00000050 AA                      	stosb
+   127 00000051 B4FF                    	mov	ah, 0FFh
+   128                                  a_0:	
+   129 00000053 FEC4                    	inc	ah
+   130                                  a_1:
+   131 00000055 AC                      	lodsb
+   132 00000056 AA                      	stosb
+   133 00000057 3C2E                    	cmp	al, '.'
+   134 00000059 74F8                    	je	short a_0	
+   135 0000005B 20C0                    	and	al, al
+   136 0000005D 75F6                    	jnz	short a_1
+   137                                  
+   138 0000005F 08E4                    	or	ah, ah		 ; if period NOT found,
+   139 00000061 750B                    	jnz	short init_codec ; then add a .WAV extension.
+   140                                  SetExt:
+   141 00000063 4F                      	dec	edi
+   142 00000064 C7072E574156            	mov	dword [edi], '.WAV'
+   143 0000006A C6470400                	mov	byte [edi+4], 0
+   144                                  
+   145                                  init_codec:
+   146                                  	; init AC97 codec
+   147                                  
+   148                                  	; 19/06/2017
+   149                                  	; 05/06/2017
+   150                                  	; 19/03/2017
+   151 0000006E A1[080C0000]            	mov	eax, [bus_dev_fn]
+   152 00000073 B041                    	mov	al, VIA_ACLINK_CTRL  ; AC link interface control (41h)
+   153 00000075 E8D1020000              	call	pciRegRead8
+   154                                  
+   155                                  	;mov	eax, [bus_dev_fn]
+   156 0000007A B040                    	mov	al, VIA_ACLINK_STAT  ; AC Link interface status (40h)
+   157 0000007C E8CA020000              	call	pciRegRead8
+   158                                  	
+   159 00000081 0FB6C2                  	movzx	eax, dl
+   160 00000084 2401                    	and	al, VIA_ACLINK_C00_READY  ; 1 ; primary codec ready ?
+   161 00000086 7522                    	jnz	short a_2
+   162                                  
+   163 00000088 E8EE030000              	call	reset_codec
+   164 0000008D 731B                    	jnc	short a_2 ; EAX = 1
+   165                                  
+   166                                  	;test	al, VIA_ACLINK_C00_READY 	
+   167                                          ;jnz     short a_2
+   168                                  
+   169                                  _codec_err:
+   170                                  	sys	_msg, CodecErrMsg, 255, 0Fh
+   170                              <1> 
+   170                              <1> 
+   170                              <1> 
+   170                              <1> 
+   170                              <1>  %if %0 >= 2
+   170 0000008F BB[670A0000]        <1>  mov ebx, %2
+   170                              <1>  %if %0 >= 3
+   170 00000094 B9FF000000          <1>  mov ecx, %3
+   170                              <1>  %if %0 = 4
+   170 00000099 BA0F000000          <1>  mov edx, %4
+   170                              <1>  %endif
+   170                              <1>  %endif
+   170                              <1>  %endif
+   170 0000009E B823000000          <1>  mov eax, %1
+   170                              <1> 
+   170 000000A3 CD40                <1>  int 40h
+   171 000000A5 E916010000                      jmp     Exit
+   172                                  
+   173                                  a_2:
+   174                                  	; eax = 1
+   175 000000AA E836040000              	call	codec_io_w16 ; w32
+   176                                  	
+   177                                  	;call	detect_codec
+   178                                  
+   179 000000AF E8F2040000              	call	channel_reset
+   180                                  
+   181 000000B4 E8F6070000              	call	write_ac97_dev_info 
+   182                                  
+   183                                  a_3:
+   184                                  	;; 14/10/2017
+   185                                  	;; SETUP INTERRUPT CALLBACK SERVICE
+   186                                  	;; 05/03/2017
+   187                                  	;mov	bl, [ac97_int_ln_reg] ; IRQ number
+   188                                  	;mov	bh, 2 ; Link IRQ to user for callback service
+   189                                  	;mov	edx, ac97_int_handler
+   190                                  	;;xor	ecx, ecx
+   191                                  	;sys	_calbac
+   192                                  	;jc	error_exit
+   193                                  
+   194                                  	; 01/08/2020
+   195                                  	; 24/06/2017
+   196                                  	;; 23/06/2017
+   197 000000B9 8A1D[160C0000]          	mov	bl, [ac97_int_ln_reg] ; IRQ number
+   198 000000BF B701                    	mov	bh, 1 ; Link IRQ to user for signal response byte
+   199 000000C1 88F9                    	mov	cl, bh ; 1
+   200 000000C3 BA[010C0000]            	mov	edx, srb
+   201                                  	sys	_calbac
+   201                              <1> 
+   201                              <1> 
+   201                              <1> 
+   201                              <1> 
+   201                              <1>  %if %0 >= 2
+   201                              <1>  mov ebx, %2
+   201                              <1>  %if %0 >= 3
+   201                              <1>  mov ecx, %3
+   201                              <1>  %if %0 = 4
+   201                              <1>  mov edx, %4
+   201                              <1>  %endif
+   201                              <1>  %endif
+   201                              <1>  %endif
+   201 000000C8 B82C000000          <1>  mov eax, %1
+   201                              <1> 
+   201 000000CD CD40                <1>  int 40h
+   202 000000CF 0F820C010000            	jc	error_exit
+   203                                  
+   204                                  	; DIRECT CGA (TEXT MODE) MEMORY ACCESS
+   205                                  	; bl = 0, bh = 04h
+   206                                  	; Direct access/map to CGA (Text) memory (0B8000h)
+   207                                  
+   208                                  	sys	_video, 0400h
+   208                              <1> 
+   208                              <1> 
+   208                              <1> 
+   208                              <1> 
+   208                              <1>  %if %0 >= 2
+   208 000000D5 BB00040000          <1>  mov ebx, %2
+   208                              <1>  %if %0 >= 3
+   208                              <1>  mov ecx, %3
+   208                              <1>  %if %0 = 4
+   208                              <1>  mov edx, %4
+   208                              <1>  %endif
+   208                              <1>  %endif
+   208                              <1>  %endif
+   208 000000DA B81F000000          <1>  mov eax, %1
+   208                              <1> 
+   208 000000DF CD40                <1>  int 40h
+   209 000000E1 3D00800B00              	cmp	eax, 0B8000h
+   210 000000E6 0F85F5000000            	jne	error_exit
+   211                                  
+   212                                  ; open the file
+   213                                          ; open existing file
+   214 000000EC E869010000                      call    openFile ; no error? ok.
+   215 000000F1 731B                            jnc     short _gsr
+   216                                  
+   217                                  ; file not found!
+   218                                  	sys	_msg, noFileErrMsg, 255, 0Fh
+   218                              <1> 
+   218                              <1> 
+   218                              <1> 
+   218                              <1> 
+   218                              <1>  %if %0 >= 2
+   218 000000F3 BB[EC0A0000]        <1>  mov ebx, %2
+   218                              <1>  %if %0 >= 3
+   218 000000F8 B9FF000000          <1>  mov ecx, %3
+   218                              <1>  %if %0 = 4
+   218 000000FD BA0F000000          <1>  mov edx, %4
+   218                              <1>  %endif
+   218                              <1>  %endif
+   218                              <1>  %endif
+   218 00000102 B823000000          <1>  mov eax, %1
+   218                              <1> 
+   218 00000107 CD40                <1>  int 40h
+   219 00000109 E9B2000000                      jmp     Exit
+   220                                  
+   221                                  _gsr:  
+   222 0000010E E877010000                     	call    getSampleRate		; read the sample rate
+   223                                                                          ; pass it onto codec.
+   224 00000113 0F82A7000000            	jc	Exit
+   225                                  
+   226 00000119 66A3[1A0C0000]          	mov	[sample_rate], ax
+   227 0000011F 880D[180C0000]          	mov	[stmo], cl
+   228 00000125 8815[190C0000]          	mov	[bps], dl
+   229                                  
+   230                                  	; 24/06/2017
+   231                                  ; setup the Codec (actually mixer registers) 
+   232 0000012B E8DD020000                      call    codecConfig            ; unmute codec, set rates.
+   233                                  	;jc	_codec_err
+   234                                  
+   235                                  PlayNow: 
+   236                                  	; DIRECT MEMORY ACCESS (for Audio Controller)
+   237                                  	; ebx = BDL buffer address (virtual, user)
+   238                                  	; ecx = buffer size (in bytes)
+   239                                  	; edx = upper limit = 0 = no limit
+   240                                  
+   241                                  	sys	_alloc, BdlBuffer, 4096, 0 
+   241                              <1> 
+   241                              <1> 
+   241                              <1> 
+   241                              <1> 
+   241                              <1>  %if %0 >= 2
+   241 00000130 BB[00100000]        <1>  mov ebx, %2
+   241                              <1>  %if %0 >= 3
+   241 00000135 B900100000          <1>  mov ecx, %3
+   241                              <1>  %if %0 = 4
+   241 0000013A BA00000000          <1>  mov edx, %4
+   241                              <1>  %endif
+   241                              <1>  %endif
+   241                              <1>  %endif
+   241 0000013F B82A000000          <1>  mov eax, %1
+   241                              <1> 
+   241 00000144 CD40                <1>  int 40h
+   242 00000146 0F8295000000            	jc	error_exit
+   243                                  
+   244 0000014C A3[880C0000]            	mov	[BDL_phy_buff], eax	; physical address
+   245                                  					; of the buffer
+   246                                  					; (which is needed
+   247                                  					; for Audio controller)
+   248                                  
+   249                                  	; DIRECT MEMORY ACCESS (for Audio Controller)
+   250                                  	; ebx = DMA buffer address (virtual, user)
+   251                                  	; ecx = buffer size (in bytes)
+   252                                  	; edx = upper limit = 0 = no limit
+   253                                  
+   254                                  	sys	_alloc, DmaBuffer, 65536, 0 
+   254                              <1> 
+   254                              <1> 
+   254                              <1> 
+   254                              <1> 
+   254                              <1>  %if %0 >= 2
+   254 00000151 BB[00000100]        <1>  mov ebx, %2
+   254                              <1>  %if %0 >= 3
+   254 00000156 B900000100          <1>  mov ecx, %3
+   254                              <1>  %if %0 = 4
+   254 0000015B BA00000000          <1>  mov edx, %4
+   254                              <1>  %endif
+   254                              <1>  %endif
+   254                              <1>  %endif
+   254 00000160 B82A000000          <1>  mov eax, %1
+   254                              <1> 
+   254 00000165 CD40                <1>  int 40h
+   255 00000167 7278                    	jc	short error_exit
+   256                                  
+   257 00000169 A3[8C0C0000]            	mov	[DMA_phy_buff], eax	; physical address
+   258                                  					; of the buffer
+   259                                  					; (which is needed
+   260                                  					; for Audio controller)
+   261                                  ;
+   262                                  ; position file pointer to start in actual wav data
+   263                                  ; MUCH improvement should really be done here to check if sample size is
+   264                                  ; supported, make sure there are 2 channels, etc.  
+   265                                  ;
+   266                                          ;mov     ah, 42h
+   267                                          ;mov     al, 0	; from start of file
+   268                                          ;mov     bx, [FileHandle]
+   269                                          ;xor     cx, cx
+   270                                          ;mov     dx, 44	; jump past .wav/riff header
+   271                                          ;int     21h
+   272                                  
+   273                                  	sys	_seek, [FileHandle], 44, 0
+   273                              <1> 
+   273                              <1> 
+   273                              <1> 
+   273                              <1> 
+   273                              <1>  %if %0 >= 2
+   273 0000016E 8B1D[250B0000]      <1>  mov ebx, %2
+   273                              <1>  %if %0 >= 3
+   273 00000174 B92C000000          <1>  mov ecx, %3
+   273                              <1>  %if %0 = 4
+   273 00000179 BA00000000          <1>  mov edx, %4
+   273                              <1>  %endif
+   273                              <1>  %endif
+   273                              <1>  %endif
+   273 0000017E B813000000          <1>  mov eax, %1
+   273                              <1> 
+   273 00000183 CD40                <1>  int 40h
+   274                                  
+   275                                  ; 14/10/2017
+   276                                  
+   277                                  ; play the .wav file.  Most of the good stuff is in here.
+   278                                  
+   279 00000185 E89B040000                      call    PlayWav
+   280                                  
+   281                                  ; close the .wav file and exit.
+   282                                  
+   283 0000018A E8E4000000                      call    closeFile
+   284                                  
+   285                                  StopPlaying:
+   286                                  	; 14/10/2017
+   287                                  	; 24/06/2017
+   288 0000018F 8A1D[160C0000]          	mov	bl, [ac97_int_ln_reg] ; Audio IRQ number
+   289 00000195 28FF                    	sub	bh, bh ; 0 = Unlink IRQ from user
+   290                                  	sys	_calbac 
+   290                              <1> 
+   290                              <1> 
+   290                              <1> 
+   290                              <1> 
+   290                              <1>  %if %0 >= 2
+   290                              <1>  mov ebx, %2
+   290                              <1>  %if %0 >= 3
+   290                              <1>  mov ecx, %3
+   290                              <1>  %if %0 = 4
+   290                              <1>  mov edx, %4
+   290                              <1>  %endif
+   290                              <1>  %endif
+   290                              <1>  %endif
+   290 00000197 B82C000000          <1>  mov eax, %1
+   290                              <1> 
+   290 0000019C CD40                <1>  int 40h
+   291                                  
+   292                                  	; Deallocate BDL buffer (not necessary just before exit!)
+   293                                  	sys	_dalloc, BdlBuffer, 4096
+   293                              <1> 
+   293                              <1> 
+   293                              <1> 
+   293                              <1> 
+   293                              <1>  %if %0 >= 2
+   293 0000019E BB[00100000]        <1>  mov ebx, %2
+   293                              <1>  %if %0 >= 3
+   293 000001A3 B900100000          <1>  mov ecx, %3
+   293                              <1>  %if %0 = 4
+   293                              <1>  mov edx, %4
+   293                              <1>  %endif
+   293                              <1>  %endif
+   293                              <1>  %endif
+   293 000001A8 B82B000000          <1>  mov eax, %1
+   293                              <1> 
+   293 000001AD CD40                <1>  int 40h
+   294                                  	; Deallocate DMA buffer (not necessary just before exit!)
+   295                                  	sys	_dalloc, DmaBuffer, 65536  ; 14/03/2017
+   295                              <1> 
+   295                              <1> 
+   295                              <1> 
+   295                              <1> 
+   295                              <1>  %if %0 >= 2
+   295 000001AF BB[00000100]        <1>  mov ebx, %2
+   295                              <1>  %if %0 >= 3
+   295 000001B4 B900000100          <1>  mov ecx, %3
+   295                              <1>  %if %0 = 4
+   295                              <1>  mov edx, %4
+   295                              <1>  %endif
+   295                              <1>  %endif
+   295                              <1>  %endif
+   295 000001B9 B82B000000          <1>  mov eax, %1
+   295                              <1> 
+   295 000001BE CD40                <1>  int 40h
+   296                                  Exit:           
+   297                                  	sys	_exit	; Bye!
+   297                              <1> 
+   297                              <1> 
+   297                              <1> 
+   297                              <1> 
+   297                              <1>  %if %0 >= 2
+   297                              <1>  mov ebx, %2
+   297                              <1>  %if %0 >= 3
+   297                              <1>  mov ecx, %3
+   297                              <1>  %if %0 = 4
+   297                              <1>  mov edx, %4
+   297                              <1>  %endif
+   297                              <1>  %endif
+   297                              <1>  %endif
+   297 000001C0 B801000000          <1>  mov eax, %1
+   297                              <1> 
+   297 000001C5 CD40                <1>  int 40h
+   298                                  here:
+   299 000001C7 EBFE                    	jmp	short here
+   300                                  
+   301                                  pmsg_usage:
+   302                                  	sys	_msg, msg_usage, 255, 0Bh
+   302                              <1> 
+   302                              <1> 
+   302                              <1> 
+   302                              <1> 
+   302                              <1>  %if %0 >= 2
+   302 000001C9 BB[770A0000]        <1>  mov ebx, %2
+   302                              <1>  %if %0 >= 3
+   302 000001CE B9FF000000          <1>  mov ecx, %3
+   302                              <1>  %if %0 = 4
+   302 000001D3 BA0B000000          <1>  mov edx, %4
+   302                              <1>  %endif
+   302                              <1>  %endif
+   302                              <1>  %endif
+   302 000001D8 B823000000          <1>  mov eax, %1
+   302                              <1> 
+   302 000001DD CD40                <1>  int 40h
+   303 000001DF EBDF                    	jmp	short Exit
+   304                                  
+   305                                  error_exit:
+   306                                  	sys	_msg, trdos386_err_msg, 255, 0Eh
+   306                              <1> 
+   306                              <1> 
+   306                              <1> 
+   306                              <1> 
+   306                              <1>  %if %0 >= 2
+   306 000001E1 BB[050B0000]        <1>  mov ebx, %2
+   306                              <1>  %if %0 >= 3
+   306 000001E6 B9FF000000          <1>  mov ecx, %3
+   306                              <1>  %if %0 = 4
+   306 000001EB BA0E000000          <1>  mov edx, %4
+   306                              <1>  %endif
+   306                              <1>  %endif
+   306                              <1>  %endif
+   306 000001F0 B823000000          <1>  mov eax, %1
+   306                              <1> 
+   306 000001F5 CD40                <1>  int 40h
+   307 000001F7 EBC7                    	jmp	short Exit
+   308                                  
+   309                                  DetectVT8233:
+   310 000001F9 B806115930              	mov     eax, (VT8233_DID << 16) + VIA_VID
+   311 000001FE E8DC010000                      call    pciFindDevice
+   312 00000203 7318                            jnc     short _1
+   313                                  
+   314                                  ; couldn't find the audio device!
+   315                                  	sys	_msg, noDevMsg, 255, 0Fh
+   315                              <1> 
+   315                              <1> 
+   315                              <1> 
+   315                              <1> 
+   315                              <1>  %if %0 >= 2
+   315 00000205 BB[300A0000]        <1>  mov ebx, %2
+   315                              <1>  %if %0 >= 3
+   315 0000020A B9FF000000          <1>  mov ecx, %3
+   315                              <1>  %if %0 = 4
+   315 0000020F BA0F000000          <1>  mov edx, %4
+   315                              <1>  %endif
+   315                              <1>  %endif
+   315                              <1>  %endif
+   315 00000214 B823000000          <1>  mov eax, %1
+   315                              <1> 
+   315 00000219 CD40                <1>  int 40h
+   316 0000021B EBA3                            jmp     short Exit
+   317                                  
+   318                                  _1:
+   319                                  	; 19/06/2017
+   320                                  	; 05/03/2017 (TRDOS 386)
+   321                                  	; 12/11/2016
+   322                                  	; Erdogan Tan - 8/11/2016
+   323                                  	; References: Kolibrios - vt823x.asm (2016)
+   324                                  	;	      VIA VT8235 V-Link South Bridge (VT8235-VIA.PDF)(2002)
+   325                                  	;	      lowlevel.eu - AC97 (2016)
+   326                                  	;	      .wav player for DOS by Jeff Leyda (2002) -this file-
+   327                                  	;	      Linux kernel - via82xx.c (2016)
+   328                                  
+   329                                  	; eax = BUS/DEV/FN
+   330                                  	;	00000000BBBBBBBBDDDDDFFF00000000
+   331                                  	; edx = DEV/VENDOR
+   332                                  	;	DDDDDDDDDDDDDDDDVVVVVVVVVVVVVVVV
+   333                                  
+   334 0000021D A3[080C0000]            	mov	[bus_dev_fn], eax
+   335 00000222 8915[0C0C0000]          	mov	[dev_vendor], edx
+   336                                  
+   337                                  	; init controller
+   338 00000228 B004                    	mov	al, PCI_CMD_REG ; command register (04h)
+   339 0000022A E82F010000              	call	pciRegRead32
+   340                                  
+   341                                  	; eax = BUS/DEV/FN/REG
+   342                                  	; edx = STATUS/COMMAND
+   343                                  	; 	SSSSSSSSSSSSSSSSCCCCCCCCCCCCCCCC
+   344 0000022F 8915[100C0000]          	mov	[stats_cmd], edx
+   345                                  
+   346 00000235 B010                    	mov	al, PCI_IO_BASE ; IO base address register (10h)
+   347 00000237 E822010000              	call	pciRegRead32
+   348                                  
+   349 0000023C 6683E2C0                	and     dx, 0FFC0h	; IO_ADDR_MASK (0FFFE) ?
+   350 00000240 668915[140C0000]                mov     [ac97_io_base], dx
+   351                                  
+   352 00000247 B03C                    	mov	al, AC97_INT_LINE ; Interrupt line register (3Ch)
+   353                                  	;call	pciRegRead32
+   354 00000249 E8FD000000              	call	pciRegRead8
+   355                                  
+   356                                  	;and 	edx, 0FFh
+   357 0000024E 6681E2FF00              	and	dx, 0FFh
+   358 00000253 8815[160C0000]            	mov     [ac97_int_ln_reg], dl
+   359                                  
+   360 00000259 C3                      	retn
+   361                                  
+   362                                  ;open or create file
+   363                                  ;
+   364                                  ;input: ds:dx-->filename (asciiz)
+   365                                  ;       al=file Mode (create or open)
+   366                                  ;output: none  cs:[FileHandle] filled
+   367                                  ;
+   368                                  openFile:
+   369                                  	;;push	eax
+   370                                  	;;push	ecx
+   371                                  	;mov	ah, 3Bh	; start with a mode
+   372                                  	;add	ah, al	; add in create or open mode
+   373                                  	;xor	cx, cx
+   374                                  	;int	21h
+   375                                  	;jc	short _of1
+   376                                  	;;mov	[cs:FileHandle], ax
+   377                                  
+   378                                  	sys	_open, wav_file_name, 0
+   378                              <1> 
+   378                              <1> 
+   378                              <1> 
+   378                              <1> 
+   378                              <1>  %if %0 >= 2
+   378 0000025A BB[380C0000]        <1>  mov ebx, %2
+   378                              <1>  %if %0 >= 3
+   378 0000025F B900000000          <1>  mov ecx, %3
+   378                              <1>  %if %0 = 4
+   378                              <1>  mov edx, %4
+   378                              <1>  %endif
+   378                              <1>  %endif
+   378                              <1>  %endif
+   378 00000264 B805000000          <1>  mov eax, %1
+   378                              <1> 
+   378 00000269 CD40                <1>  int 40h
+   379 0000026B 7205                    	jc	short _of1
+   380                                  
+   381 0000026D A3[250B0000]            	mov	[FileHandle], eax
+   382                                  _of1:
+   383                                  	;;pop	ecx
+   384                                  	;;pop	eax
+   385 00000272 C3                      	retn
+   386                                  
+   387                                  ; close the currently open file
+   388                                  ; input: none, uses cs:[FileHandle]
+   389                                  closeFile:
+   390                                  	;push	eax
+   391                                  	;push	ebx
+   392 00000273 833D[250B0000]FF        	cmp	dword [FileHandle], -1
+   393 0000027A 740D                    	je	short _cf1
+   394                                  	;mov    bx, [FileHandle]  
+   395                                  	;mov    ax, 3E00h
+   396                                          ;int    21h              ;close file
+   397                                  
+   398                                  	sys	_close, [FileHandle]
+   398                              <1> 
+   398                              <1> 
+   398                              <1> 
+   398                              <1> 
+   398                              <1>  %if %0 >= 2
+   398 0000027C 8B1D[250B0000]      <1>  mov ebx, %2
+   398                              <1>  %if %0 >= 3
+   398                              <1>  mov ecx, %3
+   398                              <1>  %if %0 = 4
+   398                              <1>  mov edx, %4
+   398                              <1>  %endif
+   398                              <1>  %endif
+   398                              <1>  %endif
+   398 00000282 B806000000          <1>  mov eax, %1
+   398                              <1> 
+   398 00000287 CD40                <1>  int 40h
+   399                                  _cf1:
+   400                                  	;pop	ebx
+   401                                  	;pop	eax
+   402 00000289 C3                      	retn
+   403                                  
+   404                                  getSampleRate:
+   405                                  	
+   406                                  ; reads the sample rate from the .wav file.
+   407                                  ; entry: none - assumes file is already open
+   408                                  ; exit: ax = sample rate (11025, 22050, 44100, 48000)
+   409                                  ;	cx = number of channels (mono=1, stereo=2)
+   410                                  ;	dx = bits per sample (8, 16)
+   411                                  
+   412 0000028A 53                      	push    ebx
+   413                                  
+   414                                          ;mov	ah, 42h
+   415                                          ;mov	al, 0	; from start of file
+   416                                          ;mov	bx, [FileHandle]
+   417                                          ;xor	cx, cx
+   418                                          ;mov	dx, 08h	; "WAVE"
+   419                                          ;int	21h
+   420                                  	
+   421                                  	sys	_seek, [FileHandle], 8, 0
+   421                              <1> 
+   421                              <1> 
+   421                              <1> 
+   421                              <1> 
+   421                              <1>  %if %0 >= 2
+   421 0000028B 8B1D[250B0000]      <1>  mov ebx, %2
+   421                              <1>  %if %0 >= 3
+   421 00000291 B908000000          <1>  mov ecx, %3
+   421                              <1>  %if %0 = 4
+   421 00000296 BA00000000          <1>  mov edx, %4
+   421                              <1>  %endif
+   421                              <1>  %endif
+   421                              <1>  %endif
+   421 0000029B B813000000          <1>  mov eax, %1
+   421                              <1> 
+   421 000002A0 CD40                <1>  int 40h
+   422                                  
+   423                                          ;mov	dx, smpRBuff
+   424                                          ;mov	cx, 28	; 28 bytes
+   425                                  	;mov	ah, 3fh
+   426                                          ;int	21h
+   427                                  
+   428                                  	sys	_read, [FileHandle], smpRBuff, 28
+   428                              <1> 
+   428                              <1> 
+   428                              <1> 
+   428                              <1> 
+   428                              <1>  %if %0 >= 2
+   428 000002A2 8B1D[250B0000]      <1>  mov ebx, %2
+   428                              <1>  %if %0 >= 3
+   428 000002A8 B9[1C0C0000]        <1>  mov ecx, %3
+   428                              <1>  %if %0 = 4
+   428 000002AD BA1C000000          <1>  mov edx, %4
+   428                              <1>  %endif
+   428                              <1>  %endif
+   428                              <1>  %endif
+   428 000002B2 B803000000          <1>  mov eax, %1
+   428                              <1> 
+   428 000002B7 CD40                <1>  int 40h
+   429                                  
+   430 000002B9 813D[1C0C0000]5741-     	cmp	dword [smpRBuff], 'WAVE'
+   430 000002C1 5645               
+   431 000002C3 7520                    	jne	short gsr_stc
+   432                                  
+   433 000002C5 66833D[280C0000]01      	cmp	word [smpRBuff+12], 1	; Offset 20, must be 1 (= PCM)
+   434 000002CD 7516                    	jne	short gsr_stc
+   435                                  
+   436 000002CF 668B0D[2A0C0000]        	mov	cx, [smpRBuff+14]	; return num of channels in CX
+   437 000002D6 66A1[2C0C0000]                  mov     ax, [smpRBuff+16]	; return sample rate in AX
+   438 000002DC 668B15[360C0000]        	mov	dx, [smpRBuff+26]	; return bits per sample value in DX
+   439                                  gsr_retn:
+   440 000002E3 5B                              pop     ebx
+   441 000002E4 C3                              retn
+   442                                  gsr_stc:
+   443 000002E5 F9                      	stc
+   444 000002E6 EBFB                    	jmp	short gsr_retn
+   445                                  
+   446                                  	; 01/08/2020
+   447                                  ;ac97_int_handler:
+   448                                  ;	; 30/07/2020 (Major BugFix)
+   449                                  ;	; Interrupt Handler for VIA VT8237R Audio Controller
+   450                                  ;	;(Derived from TRDOS 386 kernel, 'audio.s', 14/10/2017)
+   451                                  ;	; 29/07/2020
+   452                                  ;	; 15/10/2017
+   453                                  ;	; 14/10/2017 
+   454                                  ;	; 09/10/2017, 10/10/2017, 12/10/2017
+   455                                  ;	; 13/06/2017
+   456                                  ;	; 21/04/2017 (TRDOS 386 kernel, 'audio.s')
+   457                                  ;	; 24/03/2017 - 'PLAYER.COM' ('player.asm') 
+   458                                  ;
+   459                                  ;	; 30/07/2020
+   460                                  ;	; we are in CALLBACK service
+   461                                  ;	; (So, we can not use direct I/O interrupt)
+   462                                  ;	; (We can set sometings without using direct I/O, int 34h)
+   463                                  ;
+   464                                  ;	; 15/10/2017
+   465                                  ;	mov	byte [srb], 1
+   466                                  ;
+   467                                  ;	sys	_rele ; return from callback service 
+   468                                  ;	; we must not come here !
+   469                                  ;	sys	_exit
+   470                                  
+   471                                  ;=============================================================================
+   472                                  ;               PCI.ASM
+   473                                  ;=============================================================================
+   474                                  
+   475                                  ; EQUATES
+   476                                  
+   477                                  ;constants of stuff that seem hard to remember at times.
+   478                                  
+   479                                  TRUE  EQU 1
+   480                                  FALSE EQU 0
+   481                                  
+   482                                  ENABLED  EQU 1
+   483                                  DISABLED EQU 0
+   484                                  
+   485                                  BIT0  EQU 1
+   486                                  BIT1  EQU 2
+   487                                  BIT2  EQU 4
+   488                                  BIT3  EQU 8
+   489                                  BIT4  EQU 10h
+   490                                  BIT5  EQU 20h
+   491                                  BIT6  EQU 40h
+   492                                  BIT7  EQU 80h
+   493                                  BIT8  EQU 100h
+   494                                  BIT9  EQU 200h
+   495                                  BIT10 EQU 400h
+   496                                  BIT11 EQU 800h
+   497                                  BIT12 EQU 1000h
+   498                                  BIT13 EQU 2000h
+   499                                  BIT14 EQU 4000h
+   500                                  BIT15 EQU 8000h
+   501                                  BIT16 EQU 10000h
+   502                                  BIT17 EQU 20000h
+   503                                  BIT18 EQU 40000h
+   504                                  BIT19 EQU 80000h
+   505                                  BIT20 EQU 100000h
+   506                                  BIT21 EQU 200000h
+   507                                  BIT22 EQU 400000h
+   508                                  BIT23 EQU 800000h
+   509                                  BIT24 EQU 1000000h
+   510                                  BIT25 EQU 2000000h
+   511                                  BIT26 EQU 4000000h
+   512                                  BIT27 EQU 8000000h
+   513                                  BIT28 EQU 10000000h
+   514                                  BIT29 EQU 20000000h
+   515                                  BIT30 EQU 40000000h
+   516                                  BIT31 EQU 80000000h
+   517                                  NOT_BIT31 EQU 7FFFFFFFh ; 19/03/2017
+   518                                  
+   519                                  ;special characters
+   520                                  NUL     EQU 0
+   521                                  NULL    EQU 0
+   522                                  BELL    EQU 07
+   523                                  BS      EQU 08
+   524                                  TAB     EQU 09
+   525                                  LF      EQU 10
+   526                                  CR      EQU 13
+   527                                  ESCAPE  EQU 27           ;ESC is a reserved word....
+   528                                  
+   529                                  ; PCI equates
+   530                                  ; PCI function address (PFA)
+   531                                  ; bit 31 = 1
+   532                                  ; bit 23:16 = bus number     (0-255)
+   533                                  ; bit 15:11 = device number  (0-31)
+   534                                  ; bit 10:8 = function number (0-7)
+   535                                  ; bit 7:0 = register number  (0-255)
+   536                                  
+   537                                  IO_ADDR_MASK    EQU     0FFFEh	; mask off bit 0 for reading BARs
+   538                                  PCI_INDEX_PORT  EQU     0CF8h
+   539                                  PCI_DATA_PORT   EQU     0CFCh
+   540                                  PCI32           EQU     BIT31	; bitflag to signal 32bit access
+   541                                  PCI16           EQU     BIT30	; bitflag for 16bit access
+   542                                  NOT_PCI32_PCI16	EQU	03FFFFFFFh ; NOT BIT31+BIT30 ; 19/03/2017
+   543                                  
+   544                                  PCI_FN0         EQU     0 << 8
+   545                                  PCI_FN1         EQU     1 << 8
+   546                                  PCI_FN2         EQU     2 << 8
+   547                                  PCI_FN3         EQU     3 << 8
+   548                                  PCI_FN4         EQU     4 << 8
+   549                                  PCI_FN5         EQU     5 << 8
+   550                                  PCI_FN6         EQU     6 << 8
+   551                                  PCI_FN7         EQU     7 << 8
+   552                                  
+   553                                  PCI_CMD_REG	EQU	04h	; reg 04, command reg
+   554                                   IO_ENA		EQU	BIT0	; i/o decode enable
+   555                                   MEM_ENA	EQU	BIT1	; memory decode enable
+   556                                   BM_ENA		EQU     BIT2	; bus master enable
+   557                                  
+   558                                  ; CODE
+   559                                  
+   560                                  ; PCI device register reader/writers.
+   561                                  
+   562                                  ; 19/03/2017
+   563                                  ; 05/03/2017 (TRDOS 386, INT 34h, IOCTL interrupt modifications)
+   564                                  ; NASM version: Erdogan Tan (29/11/2016)
+   565                                  
+   566                                  ;===============================================================
+   567                                  ; 8/16/32bit PCI reader
+   568                                  ;
+   569                                  ; Entry: EAX=PCI Bus/Device/fn/register number
+   570                                  ;           BIT30 set if 32 bit access requested
+   571                                  ;           BIT29 set if 16 bit access requested
+   572                                  ;           otherwise defaults to 8bit read
+   573                                  ;
+   574                                  ; Exit:  DL,DX,EDX register data depending on requested read size
+   575                                  ;
+   576                                  ; Note: this routine is meant to be called via pciRegRead8, pciRegread16,
+   577                                  ;	or pciRegRead32, listed below.
+   578                                  ;
+   579                                  ; Note2: don't attempt to read 32bits of data from a non dword aligned reg
+   580                                  ;	 number.  Likewise, don't do 16bit reads from non word aligned reg #
+   581                                  ; 
+   582                                  pciRegRead:
+   583 000002E8 53                      	push	ebx
+   584 000002E9 51                      	push	ecx
+   585 000002EA 89C3                            mov     ebx, eax		; save eax, dh
+   586 000002EC 88F1                            mov     cl, dh
+   587                                  
+   588 000002EE 25FFFFFF3F                      and     eax, NOT_PCI32_PCI16	; clear out data size request
+   589 000002F3 0D00000080                      or      eax, BIT31		; make a PCI access request
+   590 000002F8 24FC                            and     al, ~3 ; NOT 3		; force index to be dword
+   591                                  
+   592 000002FA 66BAF80C                        mov     dx, PCI_INDEX_PORT
+   593                                          ;out	dx, eax			; write PCI selector
+   594 000002FE 53                      	push	ebx
+   595 000002FF 89C3                    	mov	ebx, eax ; Data dword		
+   596 00000301 B405                    	mov	ah, 5	; outd (32 bit write)
+   597 00000303 CD34                    	int	34h	
+   598 00000305 5B                      	pop	ebx
+   599                                  
+   600 00000306 66BAFC0C                        mov     dx, PCI_DATA_PORT
+   601 0000030A 88D8                            mov     al, bl
+   602 0000030C 2403                            and     al, 3			; figure out which port to
+   603 0000030E 00C2                            add     dl, al			; read to
+   604                                  
+   605                                  	; 19/03/2017
+   606 00000310 B404                    	mov	ah, 4  ; ind
+   607 00000312 F7C300000080            	test    ebx, PCI32
+   608 00000318 750C                            jnz     short _pregr0
+   609 0000031A D0EC                    	shr	ah, 1  ; ah = 2 ; inw
+   610 0000031C F7C300000040            	test    ebx, PCI16
+   611 00000322 7502                            jnz     short _pregr0
+   612 00000324 28E4                    	sub	ah, ah ; ah = 0 ; inb
+   613                                  _pregr0:	
+   614 00000326 CD34                    	int	34h
+   615                                  
+   616 00000328 F7C300000080            	test    ebx, PCI32
+   617 0000032E 7404                            jz      short _pregr1
+   618                                  
+   619 00000330 89C2                            mov     edx, eax		; return 32bits of data
+   620 00000332 EB0D                    	jmp	short _pregr2
+   621                                  _pregr1:
+   622 00000334 6689C2                  	mov	dx, ax			; return 16bits of data
+   623 00000337 F7C300000040                    test    ebx, PCI16
+   624 0000033D 7502                            jnz     short _pregr2
+   625 0000033F 88CE                            mov     dh, cl			; restore dh for 8 bit read
+   626                                  _pregr2:
+   627 00000341 89D8                            mov     eax, ebx		; restore eax
+   628 00000343 25FFFFFF3F                      and     eax, NOT_PCI32_PCI16	; clear out data size request
+   629 00000348 59                      	pop	ecx
+   630 00000349 5B                      	pop	ebx
+   631 0000034A C3                      	retn
+   632                                  
+   633                                  pciRegRead8:
+   634 0000034B 25FFFFFF3F                      and     eax, NOT_PCI32_PCI16	; set up 8 bit read size
+   635 00000350 EB96                            jmp     short pciRegRead	; call generic PCI access
+   636                                  
+   637                                  pciRegRead16:
+   638 00000352 25FFFFFF3F                      and     eax, NOT_PCI32_PCI16	; set up 16 bit read size
+   639 00000357 0D00000040                      or      eax, PCI16		; call generic PCI access
+   640 0000035C EB8A                            jmp     short pciRegRead
+   641                                  
+   642                                  pciRegRead32:
+   643 0000035E 25FFFFFF3F                      and     eax, NOT_PCI32_PCI16	; set up 32 bit read size
+   644 00000363 0D00000080                      or      eax, PCI32		; call generic PCI access
+   645 00000368 E97BFFFFFF                      jmp     pciRegRead
+   646                                  
+   647                                  
+   648                                  ; 23/03/2017
+   649                                  ; 19/03/2017
+   650                                  ;===============================================================
+   651                                  ; 8/16/32bit PCI writer
+   652                                  ;
+   653                                  ; Entry: EAX=PCI Bus/Device/fn/register number
+   654                                  ;           BIT31 set if 32 bit access requested
+   655                                  ;           BIT30 set if 16 bit access requested
+   656                                  ;           otherwise defaults to 8bit read
+   657                                  ;        DL/DX/EDX data to write depending on size
+   658                                  ;
+   659                                  ;
+   660                                  ; note: this routine is meant to be called via pciRegWrite8, pciRegWrite16,
+   661                                  ; 	or pciRegWrite32 as detailed below.
+   662                                  ;
+   663                                  ; Note2: don't attempt to write 32bits of data from a non dword aligned reg
+   664                                  ;	 number.  Likewise, don't do 16bit writes from non word aligned reg #
+   665                                  ;
+   666                                  pciRegWrite:
+   667 0000036D 53                      	push	ebx
+   668 0000036E 51                      	push	ecx
+   669 0000036F 89C3                            mov     ebx, eax		; save eax, edx
+   670 00000371 89D1                            mov     ecx, edx
+   671 00000373 25FFFFFF3F              	and     eax, NOT_PCI32_PCI16	; clear out data size request
+   672 00000378 0D00000080                      or      eax, BIT31		; make a PCI access request
+   673 0000037D 24FC                            and     al, ~3 ; NOT 3		; force index to be dword
+   674                                  
+   675 0000037F 66BAF80C                        mov     dx, PCI_INDEX_PORT
+   676                                          ;out	dx, eax			; write PCI selector
+   677 00000383 53                      	push	ebx
+   678 00000384 89C3                    	mov	ebx, eax ; Data dword		
+   679 00000386 B405                    	mov	ah, 5	; outd (32 bit write)
+   680 00000388 CD34                    	int	34h	
+   681 0000038A 8B1C24                  	mov	ebx, [esp]
+   682                                  
+   683 0000038D 66BAFC0C                        mov     dx, PCI_DATA_PORT
+   684 00000391 88D8                            mov     al, bl
+   685 00000393 2403                            and     al, 3			; figure out which port to
+   686 00000395 00C2                            add     dl, al			; write to
+   687                                  
+   688                                  	; 19/03/2017
+   689 00000397 F7C3000000C0            	test    ebx, PCI32+PCI16
+   690 0000039D 7506                            jnz     short _pregw0
+   691 0000039F B401                    	mov	ah, 1
+   692 000003A1 88C8                    	mov	al, cl 			; put data into al
+   693                                  	;int	34h
+   694 000003A3 EB0C                    	jmp	short _pregw2
+   695                                  _pregw0:
+   696                                  	;mov	ah, 5  ; outd
+   697 000003A5 F7C300000080            	test    ebx, PCI32
+   698 000003AB 7502                            jnz     short _pregw1
+   699 000003AD B403                    	mov	ah, 3
+   700                                  _pregw1:
+   701 000003AF 89CB                    	mov	ebx, ecx		; put data into ebx 		
+   702                                  _pregw2:
+   703 000003B1 CD34                    	int	34h
+   704                                  	;
+   705 000003B3 5B                      	pop	ebx
+   706 000003B4 89D8                            mov     eax, ebx		; restore eax
+   707 000003B6 25FFFFFF3F                      and     eax, NOT_PCI32_PCI16	; clear out data size request
+   708 000003BB 89CA                            mov     edx, ecx		; restore dx
+   709 000003BD 59                      	pop	ecx
+   710 000003BE 5B                      	pop	ebx
+   711 000003BF C3                      	retn
+   712                                  
+   713                                  pciRegWrite8:
+   714 000003C0 25FFFFFF3F                      and     eax, NOT_PCI32_PCI16	; set up 8 bit write size
+   715 000003C5 EBA6                            jmp	short pciRegWrite	; call generic PCI access
+   716                                  
+   717                                  pciRegWrite16:
+   718 000003C7 25FFFFFF3F                      and     eax, NOT_PCI32_PCI16	; set up 16 bit write size
+   719 000003CC 0D00000040                      or      eax, PCI16		; call generic PCI access
+   720 000003D1 EB9A                            jmp	short pciRegWrite
+   721                                  
+   722                                  pciRegWrite32:
+   723 000003D3 25FFFFFF3F                      and     eax, NOT_PCI32_PCI16	; set up 32 bit write size
+   724 000003D8 0D00000080                      or      eax, PCI32		; call generic PCI access
+   725 000003DD EB8E                            jmp	pciRegWrite
+   726                                  
+   727                                  ;===============================================================
+   728                                  ; PCIFindDevice: scan through PCI space looking for a device+vendor ID
+   729                                  ;
+   730                                  ; Entry: EAX=Device+Vendor ID
+   731                                  ;
+   732                                  ;  Exit: EAX=PCI address if device found
+   733                                  ;	 EDX=Device+Vendor ID
+   734                                  ;        CY clear if found, set if not found. EAX invalid if CY set.
+   735                                  ;
+   736                                  ; [old stackless] Destroys: ebx, esi, edi, cl
+   737                                  ;
+   738                                  pciFindDevice:
+   739                                  	;push	ecx
+   740 000003DF 50                      	push	eax
+   741                                  	;push	esi
+   742                                  	;push	edi
+   743                                  
+   744 000003E0 89C6                            mov     esi, eax                ; save off vend+device ID
+   745 000003E2 BF00FFFF7F                      mov     edi, (80000000h - 100h) ; start with bus 0, dev 0 func 0
+   746                                  
+   747                                  nextPCIdevice:
+   748 000003E7 81C700010000                    add     edi, 100h
+   749 000003ED 81FF00F8FF80                    cmp     edi, 80FFF800h		; scanned all devices?
+   750 000003F3 F9                              stc
+   751 000003F4 740C                            je      short PCIScanExit       ; not found
+   752                                  
+   753 000003F6 89F8                            mov     eax, edi                ; read PCI registers
+   754 000003F8 E861FFFFFF                      call    pciRegRead32
+   755 000003FD 39F2                            cmp     edx, esi                ; found device?
+   756 000003FF 75E6                            jne     short nextPCIdevice
+   757 00000401 F8                              clc
+   758                                  
+   759                                  PCIScanExit:
+   760 00000402 9C                      	pushf
+   761 00000403 B8FFFFFF7F              	mov	eax, NOT_BIT31 	; 19/03/2017
+   762 00000408 21F8                    	and	eax, edi	; return only bus/dev/fn #
+   763 0000040A 9D                      	popf
+   764                                  
+   765                                  	;pop	edi
+   766                                  	;pop	esi
+   767 0000040B 5A                      	pop	edx
+   768                                  	;pop	ecx
+   769 0000040C C3                      	retn
+   770                                  
+   771                                  ;=============================================================================
+   772                                  ;               CODEC.ASM
+   773                                  ;=============================================================================
+   774                                  
+   775                                  ; EQUATES
+   776                                  
+   777                                  ;Codec registers.
+   778                                  ;
+   779                                  ;Not all codecs are created equal. Refer to the spec for your specific codec.
+   780                                  ;
+   781                                  ;All registers are 16bits wide.  Access to codec registers over the AC97 link
+   782                                  ;is defined by the OEM.  
+   783                                  ;
+   784                                  ;Secondary codec's are accessed by ORing in BIT7 of all register accesses.
+   785                                  ;
+   786                                  
+   787                                  ; each codec/mixer register is 16bits
+   788                                  
+   789                                  CODEC_RESET_REG                 equ     00      ; reset codec
+   790                                  CODEC_MASTER_VOL_REG            equ     02      ; master volume
+   791                                  CODEC_HP_VOL_REG                equ     04      ; headphone volume
+   792                                  CODEC_MASTER_MONO_VOL_REG       equ     06      ; master mono volume
+   793                                  CODEC_MASTER_TONE_REG           equ     08      ; master tone (R+L)
+   794                                  CODEC_PCBEEP_VOL_REG            equ     0ah     ; PC beep volume
+   795                                  CODEC_PHONE_VOL_REG             equ     0bh     ; phone volume
+   796                                  CODEC_MIC_VOL_REG               equ     0eh     ; MIC volume
+   797                                  CODEC_LINE_IN_VOL_REG           equ     10h     ; line input volume
+   798                                  CODEC_CD_VOL_REG                equ     12h     ; CD volume
+   799                                  CODEC_VID_VOL_REG               equ     14h     ; video volume
+   800                                  CODEC_AUX_VOL_REG               equ     16h     ; aux volume
+   801                                  CODEC_PCM_OUT_REG               equ     18h     ; PCM output volume
+   802                                  CODEC_RECORD_SELECT_REG         equ     1ah     ; record select input
+   803                                  CODEC_RECORD_VOL_REG            equ     1ch     ; record volume
+   804                                  CODEC_RECORD_MIC_VOL_REG        equ     1eh     ; record mic volume
+   805                                  CODEC_GP_REG                    equ     20h     ; general purpose
+   806                                  CODEC_3D_CONTROL_REG            equ     22h     ; 3D control
+   807                                  ; 24h is reserved
+   808                                  CODEC_POWER_CTRL_REG            equ     26h     ; powerdown control
+   809                                  CODEC_EXT_AUDIO_REG             equ     28h     ; extended audio
+   810                                  CODEC_EXT_AUDIO_CTRL_REG        equ     2ah     ; extended audio control
+   811                                  CODEC_PCM_FRONT_DACRATE_REG     equ     2ch     ; PCM out sample rate
+   812                                  CODEC_PCM_SURND_DACRATE_REG     equ     2eh     ; surround sound sample rate
+   813                                  CODEC_PCM_LFE_DACRATE_REG       equ     30h     ; LFE sample rate
+   814                                  CODEC_LR_ADCRATE_REG            equ     32h     ; PCM in sample rate
+   815                                  CODEC_MIC_ADCRATE_REG           equ     34h     ; mic in sample rate
+   816                                  
+   817                                  ; 30/07/2020
+   818                                  CODEC_MISC_CRTL_BITS_REG	equ	76h	; misc control bits ; AD1980
+   819                                  ;	
+   820                                  CODEC_VENDOR_ID1		equ	7Ch	; REALTEK: 414Ch, ADI: 4144h	
+   821                                  CODEC_VENDOR_ID2		equ	7Eh	; REALTEK: 4760h, ADI: 5370h
+   822                                  
+   823                                  
+   824                                  ; Mixer registers 0 through 51h reside in the ICH and are not forwarded over
+   825                                  ; the AC97 link to the codec, which I think is a little weird.  Looks like
+   826                                  ; the ICH makes it so you don't need a fully functional codec to play audio?
+   827                                  ;
+   828                                  ; whenever 2 codecs are present in the system, use BIT7 to access the 2nd
+   829                                  ; set of registers, ie 80h-feh
+   830                                  
+   831                                  PRIMARY_CODEC		equ     0       ; 0-7F for primary codec
+   832                                  SECONDARY_CODEC		equ     BIT7    ; 80-8f registers for 2ndary
+   833                                  
+   834                                  SAMPLE_RATE_441khz	equ     44100   ; 44.1Khz (cd quality) rate
+   835                                  
+   836                                  ; each buffer descriptor BAR holds a pointer which has entries to the buffer
+   837                                  ; contents of the .WAV file we're going to play.  Each entry is 8 bytes long
+   838                                  ; (more on that later) and can contain 32 entries total, so each BAR is
+   839                                  ; 256 bytes in length, thus:
+   840                                  
+   841                                  BDL_SIZE                equ     32*8    ; Buffer Descriptor List size
+   842                                  INDEX_MASK              equ     31      ; indexes must be 0-31
+   843                                  
+   844                                  ;
+   845                                  ; Buffer Descriptors List
+   846                                  ; As stated earlier, each buffer descriptor list is a set of (up to) 32 
+   847                                  ; descriptors, each 8 bytes in length.  Bytes 0-3 of a descriptor entry point
+   848                                  ; to a chunk of memory to either play from or record to.  Bytes 4-7 of an
+   849                                  ; entry describe various control things detailed below.
+   850                                  ; 
+   851                                  ; Buffer pointers must always be aligned on a Dword boundry.
+   852                                  ;
+   853                                  ;
+   854                                  
+   855                                  IOC                     equ     BIT31	; Fire an interrupt whenever this
+   856                                                                          ; buffer is complete.
+   857                                  
+   858                                  BUP                     equ     BIT30	; Buffer Underrun Policy.
+   859                                                                          ; if this buffer is the last buffer
+   860                                                                          ; in a playback, fill the remaining
+   861                                                                          ; samples with 0 (silence) or not.
+   862                                                                          ; It's a good idea to set this to 1
+   863                                                                          ; for the last buffer in playback,
+   864                                                                          ; otherwise you're likely to get a lot
+   865                                                                          ; of noise at the end of the sound.
+   866                                  
+   867                                  ;
+   868                                  ; Bits 15:0 contain the length of the buffer, in number of samples, which
+   869                                  ; are 16 bits each, coupled in left and right pairs, or 32bits each.
+   870                                  ; Luckily for us, that's the same format as .wav files.
+   871                                  ;
+   872                                  ; A value of FFFF is 65536 samples.  Running at 44.1Khz, that's just about
+   873                                  ; 1.5 seconds of sample time.  FFFF * 32bits is 1FFFFh bytes or 128k of data.
+   874                                  ;
+   875                                  ; A value of 0 in these bits means play no samples.
+   876                                  ;
+   877                                  
+   878                                  ;VIA VT8233 (VT8235) AC97 Codec equates 
+   879                                  ;(edited by Erdogan Tan, 7/11/2016)
+   880                                  
+   881                                  ; PCI stuff
+   882                                  
+   883                                  VIA_VID		equ 1106h	; VIA's PCI vendor ID
+   884                                  VT8233_DID      equ 3059h	; VT8233 (VT8235) device ID
+   885                                  		
+   886                                  PCI_IO_BASE          equ 10h
+   887                                  AC97_INT_LINE        equ 3Ch
+   888                                  VIA_ACLINK_CTRL      equ 41h
+   889                                  VIA_ACLINK_STAT      equ 40h
+   890                                  VIA_ACLINK_C00_READY equ 01h ; primary codec ready
+   891                                  	
+   892                                  VIA_REG_AC97	     equ 80h ; dword
+   893                                  
+   894                                  VIA_ACLINK_CTRL_ENABLE	equ   80h ; 0: disable, 1: enable
+   895                                  VIA_ACLINK_CTRL_RESET	equ   40h ; 0: assert, 1: de-assert
+   896                                  VIA_ACLINK_CTRL_SYNC	equ   20h ; 0: release SYNC, 1: force SYNC hi
+   897                                  VIA_ACLINK_CTRL_VRA	equ   08h ; 0: disable VRA, 1: enable VRA
+   898                                  VIA_ACLINK_CTRL_PCM	equ   04h ; 0: disable PCM, 1: enable PCM
+   902                                  VIA_ACLINK_CTRL_INIT	equ  (VIA_ACLINK_CTRL_ENABLE +                               VIA_ACLINK_CTRL_RESET +                               VIA_ACLINK_CTRL_PCM +                               VIA_ACLINK_CTRL_VRA)
+   903                                  
+   904                                  CODEC_AUX_VOL		equ   04h
+   905                                  VIA_REG_AC97_BUSY	equ   01000000h ;(1<<24) 
+   906                                  VIA_REG_AC97_CMD_SHIFT	equ   10h ; 16
+   907                                  VIA_REG_AC97_PRIMARY_VALID equ 02000000h ;(1<<25)
+   908                                  VIA_REG_AC97_READ	equ   00800000h ;(1<<23)
+   909                                  VIA_REG_AC97_CODEC_ID_SHIFT   equ  1Eh ; 30
+   910                                  VIA_REG_AC97_CODEC_ID_PRIMARY equ  0
+   911                                  VIA_REG_AC97_DATA_SHIFT equ   0
+   912                                  VIADEV_PLAYBACK         equ   0
+   913                                  VIA_REG_OFFSET_STATUS   equ   0    ;; byte - channel status
+   914                                  VIA_REG_OFFSET_CONTROL  equ   01h  ;; byte - channel control
+   915                                  VIA_REG_CTRL_START	equ   80h  ;; WO
+   916                                  VIA_REG_CTRL_TERMINATE  equ   40h  ;; WO
+   917                                  VIA_REG_CTRL_PAUSE      equ   08h  ;; RW
+   918                                  VIA_REG_CTRL_RESET      equ   01h  ;; RW - probably reset? undocumented
+   919                                  VIA_REG_OFFSET_STOP_IDX equ   08h  ;; dword - stop index, channel type, sample rate
+   920                                  VIA8233_REG_TYPE_16BIT  equ   200000h ;; RW
+   921                                  VIA8233_REG_TYPE_STEREO equ   100000h ;; RW
+   922                                  VIA_REG_OFFSET_CURR_INDEX equ 0Fh ;; byte - channel current index (for via8233 only)
+   923                                  VIA_REG_OFFSET_TABLE_PTR equ  04h  ;; dword - channel table pointer
+   924                                  VIA_REG_OFFSET_CURR_PTR equ   04h  ;; dword - channel current pointer
+   925                                  VIA_REG_OFS_PLAYBACK_VOLUME_L equ  02h ;; byte
+   926                                  VIA_REG_OFS_PLAYBACK_VOLUME_R equ  03h ;; byte
+   927                                  VIA_REG_CTRL_AUTOSTART	equ   20h
+   928                                  VIA_REG_CTRL_INT_EOL	equ   02h
+   929                                  VIA_REG_CTRL_INT_FLAG	equ   01h
+   932                                  VIA_REG_CTRL_INT	equ  (VIA_REG_CTRL_INT_FLAG +                               VIA_REG_CTRL_INT_EOL +                               VIA_REG_CTRL_AUTOSTART)
+   933                                  
+   934                                  VIA_REG_STAT_STOP_IDX	equ   10h    ;; RO ; 30/07/2020
+   935                                  				     ; current index = stop index
+   936                                  ; 24/11/2016
+   937                                  VIA_REG_STAT_STOPPED	equ   04h    ;; RWC
+   938                                  VIA_REG_STAT_EOL	equ   02h    ;; RWC
+   939                                  VIA_REG_STAT_FLAG	equ   01h    ;; RWC
+   940                                  VIA_REG_STAT_ACTIVE	equ   80h    ;; RO
+   941                                  ; 28/11/2016
+   942                                  VIA_REG_STAT_LAST	equ   40h    ;; RO
+   943                                  VIA_REG_STAT_TRIGGER_QUEUED equ 08h  ;; RO
+   944                                  VIA_REF_CTRL_INT_STOP	equ   04h  ; Interrupt on Current Index = Stop Index
+   945                                  		   ; and End of Block
+   946                                  
+   947                                  ; 14/03/2017
+   948                                  VIA_REG_OFFSET_CURR_COUNT equ 0Ch ;; dword - channel current count, index
+   949                                  
+   950                                  ; CODE
+   951                                  
+   952                                  ; codec configuration code. Not much here really.
+   953                                  ; NASM version: Erdogan Tan (29/11/2016)
+   954                                  
+   955                                  ; enable codec, unmute stuff, set output rate to 44.1
+   956                                  ; entry: ax = desired sample rate
+   957                                  ;
+   958                                  codecConfig:
+   959                                  	; 14/10/2017
+   960                                  	; 24/06/2017
+   961                                  	; 19/06/2017, 23/06/2017
+   962                                  	; 14/11/2016, 15/11/2016
+   963                                  	; 12/11/2016 - Erdogan Tan (Ref: KolibriOS, 'setup_codec', codec.inc)
+   964                                  
+   965                                  	;mov	eax, 0202h
+   966 0000040D B804040000              	mov	eax, 0404h ; 23/06/2017
+   967                                  	;mov	[audio_master_volume], ax ; 14/10/2017
+   968 00000412 A2[900C0000]            	mov	[audio_master_volume], al ; 14/10/2017
+   969 00000417 BA02000000              	mov	edx, CODEC_MASTER_VOL_REG ; 02h ; Line Out
+   970 0000041C E84A010000              	call	codec_write
+   971                                  	;jc	cconfig_error
+   972                                  
+   973 00000421 B802020000              	mov     eax, 0202h
+   974 00000426 BA18000000              	mov	edx, CODEC_PCM_OUT_REG ; 18h ; Wave Output (Stereo)
+   975 0000042B E83B010000              	call	codec_write
+   976                                  	;jc	cconfig_error
+   977                                        
+   978 00000430 B802020000              	mov	eax, 0202h
+   979 00000435 BA04000000              	mov	edx, CODEC_AUX_VOL ; 04h ; CODEC_HP_VOL_REG ; HeadPhone
+   980 0000043A E82C010000              	call	codec_write
+   981                                  	;jc	cconfig_error
+   982                                  
+   983 0000043F B808800000                      mov     eax, 8008h ; Mute
+   984 00000444 BA0C000000                      mov	edx, 0Ch  ; AC97_PHONE_VOL ; TAD Input (Mono)
+   985 00000449 E81D010000              	call	codec_write
+   986                                  	;jc	short cconfig_error
+   987                                  
+   988 0000044E B808080000                      mov     eax, 0808h
+   989 00000453 BA10000000                      mov	edx, CODEC_LINE_IN_VOL_REG ; 10h ; Line Input (Stereo)	
+   990 00000458 E80E010000              	call	codec_write
+   991                                  	;jc	short cconfig_error
+   992                                  
+   993 0000045D B808080000              	mov     eax, 0808h
+   994 00000462 BA12000000                      mov	edx, CODEC_CD_VOL_REG ; 12h ; CR Input (Stereo)
+   995 00000467 E8FF000000              	call	codec_write
+   996                                  	;jc	short cconfig_error
+   997                                  
+   998 0000046C B808080000              	mov     eax, 0808h
+   999 00000471 BA16000000                      mov	edx, CODEC_AUX_VOL_REG ; 16h ; Aux Input (Stereo)
+  1000                                  ;	call	codec_write
+  1001                                  ;	;jc	short cconfig_error
+  1002                                  
+  1003                                  ;	; Extended Audio Status (2Ah)
+  1004                                  ;	mov	eax, CODEC_EXT_AUDIO_CTRL_REG ; 2Ah 
+  1005                                  ;	call	codec_read
+  1006                                  ;       and     eax, 0FFFFh - 2 ; clear DRA (BIT1)
+  1007                                  ;       ;or     eax, 1		; set VRA (BIT0)
+  1008                                  ;	or	eax, 5  	; VRA (BIT0) & S/PDIF (BIT2) ; 14/11/2016
+  1009                                  ;	mov	edx, CODEC_EXT_AUDIO_CTRL_REG
+  1010                                  ;	call	codec_write
+  1011                                  ;	;jc	short cconfig_error
+  1012                                  ;
+  1013                                  ;	; 24/06/2017
+  1014                                  ;set_sample_rate:
+  1015                                  ;       movzx	eax, word [sample_rate]
+  1016                                  ;	mov	edx, CODEC_PCM_FRONT_DACRATE_REG ; 2Ch ; PCM Front DAC Rate
+  1017                                  ;       ;call	codec_write
+  1018                                  ;	;retn
+  1019 00000476 E9F0000000              	jmp	codec_write
+  1020                                  
+  1021                                  ;cconfig_error:
+  1022                                  ;	retn
+  1023                                  
+  1024                                  reset_codec:
+  1025                                  	; 23/03/2017
+  1026                                  	; 12/11/2016 - Erdogan Tan (Ref: KolibriOS, vt823x.asm)
+  1027 0000047B A1[080C0000]            	mov	eax, [bus_dev_fn]
+  1028 00000480 B041                     	mov	al, VIA_ACLINK_CTRL
+  1029 00000482 B2E0                           	mov	dl, VIA_ACLINK_CTRL_ENABLE + VIA_ACLINK_CTRL_RESET + VIA_ACLINK_CTRL_SYNC
+  1030 00000484 E837FFFFFF              	call	pciRegWrite8
+  1031                                  
+  1032 00000489 E8A9030000              	call	delay_100ms 	; wait 100 ms
+  1033                                  _rc_cold:
+  1034 0000048E E822000000                      call    cold_reset
+  1035 00000493 7303                            jnc     short _reset_codec_ok
+  1036                                  
+  1037 00000495 31C0                            xor     eax, eax         ; timeout error
+  1038 00000497 C3                              retn
+  1039                                  
+  1040                                  _reset_codec_ok:
+  1041                                  	; 30/07/2020
+  1042                                  	; also reset codec by using index control register 0 of AD1980 or ALC655
+  1043                                  	; (to fix line out -2 channels audio playing- problem on AD1980 codec)  
+  1044                                  
+  1045 00000498 29C0                    	sub	eax, eax
+  1046 0000049A BA00000000              	mov	edx, CODEC_RESET_REG ; 00h ; Reset register
+  1047 0000049F E8C7000000              	call	codec_write
+  1048                                  
+  1049 000004A4 29C0                    	sub	eax, eax 
+  1050 000004A6 BA76000000              	mov	edx, CODEC_MISC_CRTL_BITS_REG ; 76h ; Misc Ctrl Bits ; AD1980
+  1051 000004AB E8BB000000              	call	codec_write
+  1052                                  	;
+  1053                                  
+  1054 000004B0 31C0                            xor     eax, eax
+  1055                                          ;mov	al, VIA_ACLINK_C00_READY ; 1
+  1056 000004B2 FEC0                            inc	al
+  1057 000004B4 C3                      	retn
+  1058                                  
+  1059                                  cold_reset:
+  1060                                  	; 23/03/2017
+  1061                                  	; 12/11/2016 - Erdogan Tan (Ref: KolibriOS, vt823x.asm)
+  1062                                  	;mov	eax, [bus_dev_fn]
+  1063                                  	;mov	al, VIA_ACLINK_CTRL
+  1064 000004B5 30D2                    	xor	dl, dl ; 0
+  1065 000004B7 E804FFFFFF              	call	pciRegWrite8
+  1066                                  
+  1067 000004BC E876030000              	call	delay_100ms 	; wait 100 ms
+  1068                                  
+  1069                                  	;; ACLink on, deassert ACLink reset, VSR, SGD data out
+  1070                                          ;; note - FM data out has trouble with non VRA codecs !!
+  1071                                          
+  1072                                  	;mov	eax, [bus_dev_fn]
+  1073                                  	;mov	al, VIA_ACLINK_CTRL
+  1074 000004C1 B2CC                    	mov	dl, VIA_ACLINK_CTRL_INIT
+  1075 000004C3 E8F8FEFFFF              	call	pciRegWrite8
+  1076                                  
+  1077 000004C8 B910000000              	mov	ecx, 16	; total 2s
+  1078                                  
+  1079                                  _crst_wait:
+  1080                                  	;mov	eax, [bus_dev_fn]
+  1081 000004CD B040                    	mov	al, VIA_ACLINK_STAT
+  1082 000004CF E877FEFFFF              	call	pciRegRead8	
+  1083                                  
+  1084 000004D4 F6C201                          test    dl, VIA_ACLINK_C00_READY
+  1085 000004D7 750B                            jnz     short _crst_ok
+  1086                                  
+  1087 000004D9 51                      	push	ecx
+  1088 000004DA E858030000              	call	delay_100ms
+  1089 000004DF 59                      	pop	ecx
+  1090                                  
+  1091 000004E0 49                              dec     ecx
+  1092 000004E1 75EA                            jnz     short _crst_wait
+  1093                                  
+  1094                                  _crst_fail:
+  1095 000004E3 F9                              stc
+  1096                                  _crst_ok:
+  1097 000004E4 C3                      	retn
+  1098                                  
+  1099                                  codec_io_w16: ;w32
+  1100 000004E5 668B15[140C0000]                mov	dx, [ac97_io_base]
+  1101 000004EC 6681C28000                      add     dx, VIA_REG_AC97
+  1102                                  	;out	dx, eax
+  1103                                  	; 05/03/2017
+  1104 000004F1 53                      	push	ebx
+  1105 000004F2 89C3                    	mov	ebx, eax
+  1106 000004F4 B405                    	mov	ah, 5 ; outd
+  1107 000004F6 CD34                    	int	34h
+  1108 000004F8 5B                      	pop	ebx
+  1109 000004F9 C3                              retn
+  1110                                  
+  1111                                  codec_io_r16: ;r32
+  1112 000004FA 668B15[140C0000]                mov     dx, [ac97_io_base]
+  1113 00000501 6681C28000                      add     dx, VIA_REG_AC97
+  1114                                          ;in	eax, dx
+  1115                                  	; 05/03/2017
+  1116 00000506 B404                    	mov	ah, 4 ; ind
+  1117 00000508 CD34                    	int	34h
+  1118 0000050A C3                              retn
+  1119                                  
+  1120                                  ctrl_io_w8:
+  1121 0000050B 660315[140C0000]                add     dx, [ac97_io_base]
+  1122                                          ;out	dx, al
+  1123                                  	; 05/03/2017
+  1124 00000512 B401                    	mov	ah, 1 ; outb
+  1125 00000514 CD34                    	int	34h
+  1126 00000516 C3                              retn
+  1127                                  
+  1128                                  ctrl_io_r8:
+  1129 00000517 660315[140C0000]                add     dx, [ac97_io_base]
+  1130                                          ;in	al, dx
+  1131                                  	; 05/03/2017
+  1132 0000051E B400                    	mov	ah, 0 ; inb
+  1133 00000520 CD34                    	int	34h
+  1134 00000522 C3                              retn
+  1135                                  
+  1136                                  ctrl_io_w32:
+  1137 00000523 660315[140C0000]                add     dx, [ac97_io_base]
+  1138                                          ;out	dx, eax
+  1139                                  	; 05/03/2017
+  1140 0000052A 53                      	push	ebx
+  1141 0000052B 89C3                    	mov	ebx, eax
+  1142 0000052D B405                    	mov	ah, 5 ; outd
+  1143 0000052F CD34                    	int	34h
+  1144 00000531 5B                      	pop	ebx
+  1145 00000532 C3                              retn
+  1146                                  
+  1147                                  ctrl_io_r32:
+  1148 00000533 660315[140C0000]                add	dx, [ac97_io_base]
+  1149                                  	;in	eax, dx
+  1150                                  	; 05/03/2017
+  1151 0000053A B404                    	mov	ah, 4 ; ind
+  1152 0000053C CD34                    	int	34h
+  1153 0000053E C3                              retn
+  1154                                  
+  1155                                  codec_read:
+  1156                                  	; 12/11/2016 - Erdogan Tan (Ref: KolibriOS, vt823x.asm)
+  1157                                          ; Use only primary codec.
+  1158                                          ; eax = register
+  1159 0000053F C1E010                          shl     eax, VIA_REG_AC97_CMD_SHIFT
+  1160 00000542 0D00008002                      or      eax, VIA_REG_AC97_PRIMARY_VALID + VIA_REG_AC97_READ
+  1161                                  
+  1162 00000547 E899FFFFFF              	call    codec_io_w16
+  1163                                  
+  1164                                        	; codec_valid
+  1165 0000054C E831000000              	call	codec_check_ready
+  1166 00000551 7301                            jnc	short _cr_ok
+  1167                                  
+  1168 00000553 C3                      	retn
+  1169                                  
+  1170                                  _cr_ok:
+  1171                                  	; wait 25 ms
+  1172 00000554 B950000000              	mov	ecx, 80
+  1173                                  _cr_wloop:
+  1174 00000559 E8E6020000              	call	delay1_4ms
+  1175 0000055E E2F9                    	loop	_cr_wloop
+  1176                                  
+  1177 00000560 E895FFFFFF                      call    codec_io_r16
+  1178 00000565 25FFFF0000                      and     eax, 0FFFFh
+  1179 0000056A C3                              retn
+  1180                                  
+  1181                                  codec_write:
+  1182                                  	; 12/11/2016 - Erdogan Tan (Ref: KolibriOS, vt823x.asm)
+  1183                                          ; Use only primary codec.
+  1184                                          
+  1185                                  	; eax = data (volume)
+  1186                                  	; edx = register (mixer register)
+  1187                                  	
+  1188 0000056B C1E210                  	shl     edx, VIA_REG_AC97_CMD_SHIFT
+  1189                                  
+  1190 0000056E C1E000                          shl     eax, VIA_REG_AC97_DATA_SHIFT ; shl eax, 0
+  1191 00000571 09C2                            or      edx, eax
+  1192                                  
+  1193 00000573 B800000000                      mov     eax, VIA_REG_AC97_CODEC_ID_PRIMARY
+  1194 00000578 C1E01E                          shl     eax, VIA_REG_AC97_CODEC_ID_SHIFT
+  1195 0000057B 09D0                            or      eax, edx
+  1196                                  
+  1197 0000057D E863FFFFFF                      call    codec_io_w16
+  1198                                          ;mov    [codec.regs+esi], ax
+  1199                                  
+  1200                                          ;call	codec_check_ready
+  1201                                         	;retn
+  1202                                  	;jmp	short _codec_check_ready	
+  1203                                  
+  1204                                  codec_check_ready:
+  1205                                  	; 12/11/2016 - Erdogan Tan (Ref: KolibriOS, vt823x.asm)
+  1206                                  
+  1207                                  _codec_check_ready:
+  1208 00000582 B914000000              	mov	ecx, 20	; total 2s
+  1209                                  _ccr_wait:
+  1210 00000587 51                      	push	ecx
+  1211                                  
+  1212 00000588 E86DFFFFFF                      call    codec_io_r16
+  1213 0000058D A900000001                      test    eax, VIA_REG_AC97_BUSY
+  1214 00000592 740B                            jz      short _ccr_ok
+  1215                                  
+  1216 00000594 E89E020000              	call	delay_100ms
+  1217                                  
+  1218 00000599 59                      	pop	ecx
+  1219                                  
+  1220 0000059A 49                      	dec     ecx
+  1221 0000059B 75EA                            jnz     short _ccr_wait
+  1222                                  
+  1223 0000059D F9                              stc
+  1224 0000059E C3                              retn
+  1225                                  
+  1226                                  _ccr_ok:
+  1227 0000059F 59                      	pop	ecx
+  1228 000005A0 25FFFF0000              	and     eax, 0FFFFh
+  1229 000005A5 C3                              retn
+  1230                                  
+  1231                                  channel_reset:
+  1232                                  	; 24/06/2017
+  1233                                  	; 29/05/2017
+  1234                                  	; 23/03/2017
+  1235                                  	; 14/11/2016 - Erdogan Tan
+  1236                                  	; 12/11/2016 - Erdogan Tan (Ref: KolibriOS, vt823x.asm)
+  1237 000005A6 BA01000000                      mov	edx, VIA_REG_OFFSET_CONTROL
+  1238                                          ;mov	eax, VIA_REG_CTRL_PAUSE + VIA_REG_CTRL_TERMINATE + VIA_REG_CTRL_RESET
+  1239 000005AB B848000000                      mov	eax, VIA_REG_CTRL_PAUSE + VIA_REG_CTRL_TERMINATE ; 24/06/2017        
+  1240 000005B0 E856FFFFFF              	call    ctrl_io_w8
+  1241                                  
+  1242                                          ;mov	edx, VIA_REG_OFFSET_CONTROL
+  1243                                          ;call   ctrl_io_r8
+  1244                                  
+  1245 000005B5 B9A0000000              	mov	ecx, 160 ; 200 (50 ms)	
+  1246                                  _ch_rst_wait:
+  1247 000005BA E885020000              	call	delay1_4ms
+  1248 000005BF 49                      	dec	ecx
+  1249 000005C0 75F8                    	jnz	short _ch_rst_wait     
+  1250                                  
+  1251                                          ; disable interrupts
+  1252 000005C2 BA01000000                      mov	edx, VIA_REG_OFFSET_CONTROL
+  1253 000005C7 31C0                            xor     eax, eax
+  1254 000005C9 E83DFFFFFF                      call    ctrl_io_w8
+  1255                                  
+  1256                                          ; clear interrupts
+  1257 000005CE BA00000000                      mov	edx, VIA_REG_OFFSET_STATUS
+  1258 000005D3 B803000000              	mov	eax, 3
+  1259 000005D8 E82EFFFFFF                      call	ctrl_io_w8
+  1260                                  
+  1261                                  	;mov	edx, VIA_REG_OFFSET_CURR_PTR
+  1262                                  	;xor	eax, eax
+  1263                                  	;call	ctrl_io_w32
+  1264                                  
+  1265 000005DD C3                              retn
+  1266                                  
+  1267                                  loadFromFile:
+  1268                                  	; 17/03/2017
+  1269                                  	; edi = buffer address
+  1270                                  	; edx = buffer size
+  1271                                  	; 10/03/2017
+  1272                                          ;push	eax
+  1273                                          ;push	ecx
+  1274                                          ;push	edx
+  1275                                  	;push	ebx
+  1276 000005DE F605[000C0000]01                test    byte [eof_flag], ENDOFFILE	; have we already read the
+  1277 000005E5 F9                              stc			; last of the file?
+  1278 000005E6 7531                            jnz     short endLFF
+  1279                                  	;clc
+  1280                                  	; load file into memory
+  1281                                  	sys 	_read, [FileHandle], edi
+  1281                              <1> 
+  1281                              <1> 
+  1281                              <1> 
+  1281                              <1> 
+  1281                              <1>  %if %0 >= 2
+  1281 000005E8 8B1D[250B0000]      <1>  mov ebx, %2
+  1281                              <1>  %if %0 >= 3
+  1281 000005EE 89F9                <1>  mov ecx, %3
+  1281                              <1>  %if %0 = 4
+  1281                              <1>  mov edx, %4
+  1281                              <1>  %endif
+  1281                              <1>  %endif
+  1281                              <1>  %endif
+  1281 000005F0 B803000000          <1>  mov eax, %1
+  1281                              <1> 
+  1281 000005F5 CD40                <1>  int 40h
+  1282 000005F7 89D1                    	mov	ecx, edx
+  1283 000005F9 720A                    	jc	short padfill ; error !
+  1284 000005FB 21C0                    	and	eax, eax
+  1285 000005FD 7406                    	jz	short padfill
+  1286 000005FF 29C1                    	sub	ecx, eax
+  1287 00000601 7416                    	jz	short endLFF
+  1288 00000603 01C7                    	add	edi, eax  
+  1289                                  padfill:
+  1290 00000605 803D[190C0000]10        	cmp 	byte [bps], 16
+  1291 0000060C 740C                    	je	short _7
+  1292                                  	; Minimum Value = 0
+  1293 0000060E 30C0                            xor     al, al
+  1294 00000610 F3AA                    	rep	stosb
+  1295                                  _6:
+  1296                                          ;clc			; don't exit with CY yet.
+  1297 00000612 800D[000C0000]01                or	byte [eof_flag], ENDOFFILE	; end of file flag
+  1298                                  endLFF:
+  1299                                  	;pop	ebx
+  1300                                  	;pop	edx
+  1301                                          ;pop	ecx
+  1302                                          ;pop	eax
+  1303 00000619 C3                              retn
+  1304                                  _7:
+  1305                                  	; Minimum value = 8000h (-32768)
+  1306 0000061A D1E9                    	shr	ecx, 1 
+  1307 0000061C 66B80080                	mov	ax, 8000h ; -32768
+  1308 00000620 F366AB                  	rep	stosw
+  1309 00000623 EBED                    	jmp	short _6
+  1310                                  
+  1311                                  ;=============================================================================
+  1312                                  ;               VIA_WAV.ASM
+  1313                                  ;=============================================================================
+  1314                                  
+  1315                                  ; DOS based .WAV player using AC'97 and codec interface.
+  1316                                  ; ---------------------------------------------------------------
+  1317                                  ; VIA VT8233 Modification & NASM version: Erdogan Tan (29/11/2016)
+  1318                                  ; Last Update: 08/12/2016 (by Erdogan Tan)
+  1319                                  
+  1320                                  ; player internal variables and other equates.
+  1321                                  BUFFERSIZE      equ     32768	; 32K half buffer size. ; 14/03/2017
+  1322                                  ENDOFFILE       equ     BIT0	; flag for knowing end of file
+  1323                                  
+  1324                                  ;===========================================================================
+  1325                                  ; entry: none.  File is already open and [filehandle] filled.
+  1326                                  ; exit:  not until the song is finished or the user aborts.
+  1327                                  ;
+  1328                                  	; 14/10/2017
+  1329                                  	; 17/03/2017
+  1330                                  PlayWav:
+  1331                                         ; load 32768 bytes into half buffer 1
+  1332                                  
+  1333 00000625 BF[00000100]            	mov     edi, DmaBuffer
+  1334 0000062A BA00800000              	mov	edx, BUFFERSIZE
+  1335 0000062F E8AAFFFFFF              	call	loadFromFile
+  1336                                  
+  1337                                  	; 30/07/2020
+  1338 00000634 F605[000C0000]01        	test    byte [eof_flag], ENDOFFILE  ; end of file
+  1339 0000063B 7518                    	jnz	short _8 ; yes
+  1340                                  			 ; bypass filling dma half buffer 2
+  1341                                  
+  1342 0000063D C605[050C0000]01        	mov	byte [audio_flag], 1
+  1343                                  
+  1344                                  	; load 32768 bytes into half buffer 2
+  1345                                  
+  1346 00000644 BF[00000100]            	mov	edi, DmaBuffer
+  1347 00000649 BA00800000              	mov	edx, BUFFERSIZE
+  1348 0000064E 01D7                    	add	edi, edx
+  1349 00000650 E889FFFFFF              	call	loadFromFile
+  1350                                  
+  1351                                  _8:
+  1352                                  
+  1353                                  ; write last valid index to 31 to start with.
+  1354                                  ; The Last Valid Index register tells the DMA engine when to stop playing.
+  1355                                  ; 
+  1356                                  ; As we progress through the song we change the last valid index to always be
+  1357                                  ; something other than the index we're currently playing.  
+  1358                                  ;
+  1359                                          ;;mov   al, 1
+  1360                                          ;mov	al, 31
+  1361                                  	;call   setLastValidIndex
+  1362                                  
+  1363                                  ; create Buffer Descriptor List
+  1364                                  ;
+  1365                                  ; A buffer descriptor list is a list of pointers and control bits that the
+  1366                                  ; DMA engine uses to know where to get the .wav data and how to play it.
+  1367                                  ;
+  1368                                  ; I set it up to use only 2 buffers of .wav data, and whenever 1 buffer is
+  1369                                  ; playing, I refresh the other one with good data.
+  1370                                  ;
+  1371                                  ;
+  1372                                  ; For the control bits, you can specify that the DMA engine fire an interrupt
+  1373                                  ; after a buffer has been processed, but I poll the current index register
+  1374                                  ; to know when it's safe to update the other buffer.
+  1375                                  ;
+  1376                                  ; I set the BUP bit, which tells the DMA engine to just play 0's (silence)
+  1377                                  ; if it ever runs out of data to play.  Good for safety.
+  1378                                  ;
+  1379                                  	; 05/03/2017 (32 bit buffer addresses)
+  1380                                  
+  1381                                  	; 14/02/2017
+  1382 00000655 BF[00100000]                    mov     edi, BdlBuffer		; get BDL address
+  1383                                  	; ecx <= 32768 ; 29/07/2020
+  1384 0000065A 66B91000                        mov     cx, 32 / 2		; make 32 entries in BDL
+  1385                                  _0:
+  1386                                  
+  1387                                  ; set buffer descriptor 0 to start of data file in memory
+  1388                                  
+  1389 0000065E A1[8C0C0000]                    mov	eax, [DMA_phy_buff]	; Physical address of DMA buffer
+  1390 00000663 AB                              stosd				; store dmabuffer1 address
+  1391                                  
+  1392 00000664 89C2                    	mov	edx, eax ; 05/03/2017
+  1393                                  
+  1394                                  ;
+  1395                                  ; set length to 32k samples. 1 sample is 16bits or 2bytes.
+  1396                                  ; Set control (bits 31:16) to BUP, bits 15:0=number of samples.
+  1397                                  ; 
+  1398                                  
+  1399                                  ; VIA VT8235.PDF: (Page 110) (Erdogan Tan, 29/11/2016)
+  1400                                  	;
+  1401                                  	; 	Audio SGD Table Format
+  1402                                  	;	-------------------------------
+  1403                                  	;	63   62    61-56    55-32  31-0
+  1404                                  	;	--   --   --------  -----  ----
+  1405                                  	;	EOL FLAG -reserved- Base   Base
+  1406                                  	;		    	    Count  Address
+  1407                                  	;		            [23:0] [31:0]
+  1408                                  	;	EOL: End Of Link. 
+  1409                                  	;	     1 indicates this block is the last of the link.
+  1410                                  	;	     If the channel “Interrupt on EOL” bit is set, then
+  1411                                  	;	     an interrupt is generated at the end of the transfer.
+  1412                                  	;
+  1413                                  	;	FLAG: Block Flag. If set, transfer pauses at the end of this
+  1414                                  	;	      block. If the channel “Interrupt on FLAG” bit is set,
+  1415                                  	;	      then an interrupt is generated at the end of this block.
+  1416                                  
+  1417                                  	FLAG	EQU BIT30
+  1418                                  	EOL	EQU BIT31
+  1419                                  
+  1420                                  	; 08/12/2016 - Erdogan Tan
+  1421 00000666 B800800000              	mov	eax, BUFFERSIZE ; DMA half buffer size ; 30/07/2020
+  1422 0000066B 01C2                    	add	edx, eax ; 05/03/2017
+  1423 0000066D 0D00000040              	or	eax, FLAG
+  1424                                  	;or	eax, EOL
+  1425 00000672 AB                      	stosd
+  1426                                  
+  1427                                  ; 2nd buffer:
+  1428                                  
+  1429 00000673 89D0                            mov	eax, edx ; Physical address of the 2nd half of DMA buffer	
+  1430 00000675 AB                      	stosd		 ; store dmabuffer2 address
+  1431                                  
+  1432                                  ; set length to 64k (32k of two 16 bit samples)
+  1433                                  ; Set control (bits 31:16) to BUP, bits 15:0=number of samples
+  1434                                  ; 
+  1435                                  	; 08/12/2016 - Erdogan Tan
+  1436                                  	;mov	eax, BUFFERSIZE
+  1437                                  	;or	eax, EOL
+  1438                                  	; 29/07/2020
+  1439                                  	;or	eax, FLAG
+  1440 00000676 B800800040              	mov	eax, BUFFERSIZE | FLAG
+  1441 0000067B AB                      	stosd
+  1442                                  
+  1443 0000067C E2E0                            loop    _0
+  1444                                  
+  1445                                  	; 30/07/2020
+  1446 0000067E 814FFC00000080          	or	dword [edi-4], EOL
+  1447                                  
+  1448                                  ;
+  1449                                  ; tell the DMA engine where to find our list of Buffer Descriptors.
+  1450                                  ; this 32bit value is a flat mode memory offset (ie no segment:offset)
+  1451                                  ;
+  1452                                  ; write buffer descriptor list address
+  1453                                  ;
+  1454                                  	; Extended Audio Status (2Ah)
+  1455 00000685 B82A000000              	mov	eax, CODEC_EXT_AUDIO_CTRL_REG ; 2Ah 
+  1456 0000068A E8B0FEFFFF              	call	codec_read
+  1457 0000068F 25FDFF0000              	and     eax, 0FFFFh - 2		; clear DRA (BIT1)
+  1458                                  	;or     eax, 1			; set VRA (BIT0)
+  1459 00000694 83C805                  	or	eax, 5  	; VRA (BIT0) & S/PDIF (BIT2) ; 14/11/2016
+  1460 00000697 BA2A000000              	mov	edx, CODEC_EXT_AUDIO_CTRL_REG
+  1461 0000069C E8CAFEFFFF              	call	codec_write
+  1462                                  	;jc	short cconfig_error
+  1463                                  
+  1464                                  set_sample_rate:
+  1465                                  	;movzx	eax, word [audio_freq]
+  1466 000006A1 66A1[1A0C0000]          	mov	ax, [audio_freq]
+  1467 000006A7 BA2C000000              	mov	edx, CODEC_PCM_FRONT_DACRATE_REG ; 2Ch ; PCM Front DAC Rate
+  1468 000006AC E8BAFEFFFF              	call	codec_write
+  1469                                  
+  1470                                  	; 14/10/2017
+  1471 000006B1 A1[880C0000]                    mov	eax, [BDL_phy_buff] ; Physical address of the BDL
+  1472                                  	  
+  1473                                  	; 12/11/2016 - Erdogan Tan 
+  1474                                  	; (Ref: KolibriOS, vt823x.asm, 'create_primary_buff')
+  1475 000006B6 BA04000000              	mov	edx, VIADEV_PLAYBACK + VIA_REG_OFFSET_TABLE_PTR
+  1476 000006BB E863FEFFFF                      call	ctrl_io_w32
+  1477                                  
+  1478                                  	;call	codec_check_ready
+  1479                                  
+  1480 000006C0 66BA0200                  	mov	dx, VIADEV_PLAYBACK + VIA_REG_OFS_PLAYBACK_VOLUME_L
+  1481                                          ;mov	eax, 2	; 31
+  1482                                  	; 30/07/2020
+  1483                                  	;mov	al, 31
+  1484                                          ;sub	al, [audio_master_volume_l]
+  1485 000006C4 A0[900C0000]            	mov	al, [audio_master_volume]  ; 14/10/2017
+  1486 000006C9 E83DFEFFFF              	call	ctrl_io_w8
+  1487                                  
+  1488                                  	;call	codec_check_ready
+  1489                                  
+  1490 000006CE 66BA0300                        mov     dx, VIADEV_PLAYBACK + VIA_REG_OFS_PLAYBACK_VOLUME_R
+  1491                                          ;mov	ax, 2	; 31
+  1492                                  	; 30/07/2020
+  1493                                  	;mov	al, 31
+  1494                                          ;sub	al, [audio_master_volume_r]
+  1495 000006D2 A0[900C0000]            	mov	al, [audio_master_volume]  ;14/10/2017
+  1496 000006D7 E82FFEFFFF              	call    ctrl_io_w8
+  1497                                  
+  1498                                  	;call	codec_check_ready
+  1499                                  ;
+  1500                                  ;
+  1501                                  ; All set. Let's play some music.
+  1502                                  ;
+  1503                                  ;
+  1504                                         	;mov    dx, VIADEV_PLAYBACK + VIA_REG_OFFSET_STOP_IDX
+  1505                                          ;mov    ax, VIA8233_REG_TYPE_16BIT or VIA8233_REG_TYPE_STEREO or 0xfffff or 0xff000000
+  1506                                          ;call   ctrl_io_w32
+  1507                                  
+  1508                                  	;call	codec_check_ready
+  1509                                  
+  1510                                  	; 08/12/2016
+  1511                                  	; 07/10/2016
+  1512                                          ;mov    al, 1	
+  1513                                  	; 29/07/2020
+  1514                                  	;mov	al, 31
+  1515 000006DC B0FF                    	mov	al, 0FFh
+  1516 000006DE E82A000000              	call    set_VT8233_LastValidIndex
+  1517                                  
+  1518 000006E3 C605[030C0000]01        	mov	byte [audio_play_cmd], 1 ; play command (do not stop) !
+  1519                                  	
+  1520                                  	; 14/10/2017
+  1521 000006EA A0[050C0000]            	mov 	al, [audio_flag]
+  1522 000006EF 0431                    	add	al, '1'
+  1523 000006F1 B44E                    	mov	ah, 4Eh
+  1524 000006F3 66A300800B00            	mov 	[0B8000h], ax ; Display current buffer number
+  1525                                  
+  1526                                  vt8233_play: ; continue to play
+  1527                                  	; 22/04/2017
+  1528                                          ;mov	al, VIA_REG_CTRL_INT
+  1529                                         	;or	al, VIA_REG_CTRL_START
+  1530                                          ;;mov	al, VIA_REG_CTRL_AUTOSTART + VIA_REG_CTRL_START
+  1531                                  	; 29/07/2020
+  1532 000006F9 B0A1                    	mov	al, VIA_REG_CTRL_AUTOSTART + VIA_REG_CTRL_START + VIA_REG_CTRL_INT_FLAG
+  1533 000006FB 66BA0100                	mov     dx, VIADEV_PLAYBACK + VIA_REG_OFFSET_CONTROL
+  1534 000006FF E807FEFFFF                      call    ctrl_io_w8
+  1535                                  	;call	codec_check_ready
+  1536                                  	;retn
+  1537                                  	;jmp	codec_check_ready
+  1538                                  
+  1539                                  	; 14/10/2017
+  1540 00000704 C605[910C0000]1B        	mov	byte [volume_level], 1Fh-04h ; initial value
+  1541                                  
+  1542 0000070B EB43                    	jmp	short p_loop ; 14/10/2017
+  1543                                  
+  1544                                  ;input AL = index # to stop on
+  1545                                  set_VT8233_LastValidIndex:
+  1546                                  	; 29/07/2020
+  1547                                  	; 10/06/2017
+  1548                                  	; 21/04/2017 (TRDOS 386 kernel, 'audio.s')
+  1549                                  	; 24/03/2017 - 'PLAYER.COM' ('via_wav.asm' - 29/11/2016) 
+  1550                                  	; 19/11/2016
+  1551                                  	; 14/11/2016 - Erdogan Tan (Ref: VIA VT8235.PDF, Page 110)
+  1552                                  	; 12/11/2016 - Erdogan Tan
+  1553                                  	; (Ref: KolibriOS, vt823x.asm, 'create_primary_buff')
+  1554                                  	;push	edx
+  1555                                  	;push	ax
+  1556 0000070D 50                      	push	eax ; 29/07/2020
+  1557                                  	;push	ecx
+  1558 0000070E 0FB705[1A0C0000]        	movzx	eax, word [audio_freq] ; Hertz
+  1559 00000715 BA00001000              	mov	edx, 100000h ; 2^20 = 1048576
+  1560 0000071A F7E2                    	mul	edx
+  1561 0000071C B980BB0000              	mov	ecx, 48000	
+  1562 00000721 F7F1                    	div	ecx
+  1563                                  	;and	eax, 0FFFFFh
+  1564                                  	;pop	ecx
+  1565                                  	;pop	dx 
+  1566 00000723 5A                      	pop	edx ; 29/07/2020
+  1567 00000724 C1E218                  	shl	edx, 24  ; STOP Index Setting: Bit 24 to 31
+  1568 00000727 09D0                    	or	eax, edx
+  1569                                  	; 19/11/2016
+  1570 00000729 803D[190C0000]10        	cmp	byte [audio_bps], 16
+  1571 00000730 7505                    	jne	short sLVI_1
+  1572 00000732 0D00002000              	or	eax, VIA8233_REG_TYPE_16BIT
+  1573                                  sLVI_1:
+  1574 00000737 803D[180C0000]02        	cmp	byte [audio_stmo], 2
+  1575 0000073E 7505                    	jne	short sLVI_2
+  1576 00000740 0D00001000              	or	eax, VIA8233_REG_TYPE_STEREO
+  1577                                  sLVI_2:
+  1578 00000745 BA08000000              	mov     edx, VIADEV_PLAYBACK + VIA_REG_OFFSET_STOP_IDX
+  1579 0000074A E8D4FDFFFF                      call    ctrl_io_w32
+  1580                                  	;call	codec_check_ready
+  1581                                  	;pop	edx
+  1582 0000074F C3                      	retn
+  1583                                  
+  1584                                  	; 30/07/2020
+  1585                                  	; 15/10/2017
+  1586                                  	; 14/10/2017
+  1587                                  	; 21/04/2017
+  1588                                  	; 17/03/2017
+  1589                                  	; 05/03/2017 (TRDOS 386)
+  1590                                  	; 14/02/2017
+  1591                                  	; 13/02/2017
+  1592                                  	; 08/12/2016
+  1593                                  	; 28/11/2016
+  1594                                  p_loop:
+  1595                                  	; 15/10/2017
+  1596 00000750 803D[010C0000]00        	cmp	byte [srb], 0
+  1597 00000757 7641                    	jna	short q_loop
+  1598                                  
+  1599 00000759 C605[010C0000]00        	mov	byte [srb], 0
+  1600                                  
+  1601                                  	; 01/08/2020
+  1602 00000760 B030                    	mov	al, '0'
+  1603 00000762 B44E                    	mov	ah, 4Eh
+  1604 00000764 66A300800B00            	mov 	[0B8000h], ax ; Display current buffer number
+  1605                                  
+  1606                                  	; 30/07/2020
+  1607 0000076A E8F6000000              	call	ac97_int_ack 
+  1608                                  
+  1609                                  	; 30/07/2020
+  1610 0000076F A0[050C0000]            	mov 	al, [audio_flag]
+  1611 00000774 0431                    	add	al, '1'
+  1612 00000776 B44E                    	mov	ah, 4Eh
+  1613 00000778 66A300800B00            	mov 	[0B8000h], ax ; Display current buffer number
+  1614                                  
+  1615 0000077E BF[00000100]            	mov	edi, DmaBuffer
+  1616 00000783 BA00800000              	mov	edx, BUFFERSIZE ; DMA half buffer size
+  1617                                  
+  1618 00000788 803D[050C0000]00        	cmp	byte [audio_flag], 0
+  1619 0000078F 7602                    	jna	short p_load_buffer
+  1620                                  
+  1621 00000791 01D7                    	add	edi, edx  ; 2nd half of DMA buffer
+  1622                                  
+  1623                                  p_load_buffer:
+  1624 00000793 E846FEFFFF              	call	loadFromFile
+  1625 00000798 7212                    	jc	short p_return  ; EOF or read error. 
+  1626                                  
+  1627                                  q_loop:
+  1628                                  	; 15/10/2017
+  1629 0000079A B401                    	mov     ah, 1		; any key pressed?
+  1630 0000079C CD32                    	int     32h		; no, Loop.
+  1631 0000079E 7418                    	jz	short r_loop
+  1632                                  
+  1633 000007A0 B400                    	mov     ah, 0		; flush key buffer...
+  1634 000007A2 CD32                    	int     32h
+  1635                                  
+  1636                                  	; 14/10/2017
+  1637                                  	; 09/10/2017 (playmod5.s)
+  1638 000007A4 3C2B                    	cmp	al, '+' ; increase sound volume
+  1639 000007A6 7441                    	je	short inc_volume_level
+  1640 000007A8 3C2D                    	cmp	al, '-'
+  1641 000007AA 7460                    	je	short dec_volume_level
+  1642                                  
+  1643                                  p_return:
+  1644 000007AC C605[030C0000]00        	mov	byte [audio_play_cmd], 0
+  1645                                  
+  1646                                  	; 23/06/2017
+  1647                                  _exit_:
+  1648                                  	; 24/06/2017
+  1649                                  	; finished with song, stop everything
+  1650                                  	;mov	al, VIA_REG_CTRL_INT
+  1651                                  	;or	al, VIA_REG_CTRL_TERMINATE
+  1652                                  	;mov	dx, VIADEV_PLAYBACK + VIA_REG_OFFSET_CONTROL
+  1653                                  	;call	ctrl_io_w8
+  1654                                  
+  1655 000007B3 E9EEFDFFFF              	jmp	channel_reset
+  1656                                  
+  1657                                  r_loop:
+  1658                                  	; 01/08/2020
+  1659 000007B8 FE0D[920C0000]          	dec	byte [counter]
+  1660 000007BE A0[920C0000]            	mov	al, [counter]
+  1661 000007C3 3C7F                    	cmp	al, 127
+  1662 000007C5 770A                    	ja	short t_loop
+  1663 000007C7 08C0                    	or	al, al
+  1664 000007C9 7402                    	jz	short s_loop
+  1665 000007CB EB83                    	jmp	p_loop
+  1666                                  s_loop:
+  1667 000007CD B020                    	mov	al, ' '
+  1668 000007CF EB0B                    	jmp	short v_loop
+  1669                                  t_loop:
+  1670 000007D1 3CFF                    	cmp	al, 255
+  1671 000007D3 7405                    	je	short u_loop
+  1672 000007D5 E976FFFFFF              	jmp	p_loop
+  1673                                  u_loop:
+  1674 000007DA B02E                    	mov	al, '.'
+  1675                                  v_loop:
+  1676 000007DC B40E                    	mov	ah, 0Eh
+  1677 000007DE 66A302800B00            	mov	[0B8002h], ax
+  1678 000007E4 E967FFFFFF              	jmp	p_loop
+  1679                                  	
+  1680                                  	; 09/10/2017 (playmod5.s)
+  1681                                  	; 24/06/2017 (wavplay2.s)
+  1682                                  inc_volume_level:
+  1683 000007E9 8A0D[910C0000]          	mov	cl, [volume_level]
+  1684 000007EF 80F91F                  	cmp	cl, 1Fh ; 31
+  1685                                  	;jnb	short p_loop ; 15/10/2017
+  1686 000007F2 0F8358FFFFFF            	jnb	p_loop ; 30/07/2020
+  1687 000007F8 FEC1                    	inc	cl
+  1688                                  change_volume_level:
+  1689 000007FA 880D[910C0000]          	mov	[volume_level], cl
+  1690                                  	; 30/07/2020
+  1691 00000800 88CD                    	mov	ch, cl ; same volume level for L & R
+  1692                                  	; Set Master Volume Level
+  1693 00000802 E818000000              	call	set_master_volume_level ; 14/10/2017
+  1694 00000807 E944FFFFFF              	jmp	p_loop ; 15/10/2017
+  1695                                  dec_volume_level:
+  1696 0000080C 8A0D[910C0000]          	mov	cl, [volume_level]
+  1697 00000812 80F901                  	cmp	cl, 1 ; 1
+  1698 00000815 0F8635FFFFFF            	jna	p_loop ; 15/10/2017
+  1699 0000081B FEC9                    	dec	cl
+  1700 0000081D EBDB                    	jmp	short change_volume_level
+  1701                                  
+  1702                                  set_master_volume_level:
+  1703                                  vt8233_volume:
+  1704                                  	; 30/07/2020
+  1705                                  	; 14/10/2017
+  1706                                  	; set VT8237R (vt8233) sound volume level
+  1707                                  	; 24/04/2017 (TRDOS 386 kernel, 'audio.s')
+  1708                                  	; 22/04/2017
+  1709                                  	; bl = component (0 = master/playback/lineout volume)
+  1710                                  	; cl = left channel volume level (0 to 31)
+  1711                                  	; ch = right channel volume level (0 to 31)
+  1712                                  
+  1713                                  	;or	bl, bl
+  1714                                  	;jnz	short vt8233_vol_1 ; temporary !
+  1715 0000081F 66B81F1F                	mov	ax, 1F1Fh ; 31,31
+  1716                                  	;cmp	cl, al
+  1717                                  	;ja	short vt8233_vol_1 ; temporary !
+  1718                                  	;cmp	ch, ah
+  1719                                  	;ja	short vt8233_vol_1 ; temporary !
+  1720                                  	;mov	[audio_master_volume], cx
+  1721                                  
+  1722                                  	; 30/07/2020
+  1723 00000823 6629C8                  	sub	ax, cx
+  1724 00000826 66A3[900C0000]          	mov	[audio_master_volume], ax
+  1725                                  	;
+  1726 0000082C BA02000000              	mov	edx, CODEC_MASTER_VOL_REG ; 02h ; Line Out
+  1727 00000831 E835FDFFFF              	call	codec_write
+  1728                                  vt8233_vol_1:
+  1729 00000836 C3                      	retn
+  1730                                  
+  1731                                  delay_100ms:
+  1732                                  	; wait 100 ms
+  1733                                  	;mov	ecx, 400  ; 400*0.25ms  ; 29/05/2017
+  1734 00000837 B964000000              	mov	ecx, 100  ; 23/06/2017
+  1735                                  _delay_x_ms:
+  1736 0000083C E803000000              	call	delay1_4ms
+  1737 00000841 E2F9                            loop	_delay_x_ms
+  1738 00000843 C3                      	retn
+  1739                                  
+  1740                                  ;       delay1_4ms - Delay for 1/4 millisecond.
+  1741                                  ;	    1mS = 1000us
+  1742                                  ;       Entry:
+  1743                                  ;         None
+  1744                                  ;       Exit:
+  1745                                  ;	  None
+  1746                                  ;
+  1747                                  ;       Modified:
+  1748                                  ;         None
+  1749                                  ;
+  1750                                  PORTB		EQU	061h
+  1751                                  REFRESH_STATUS	EQU	010h	; Refresh signal status
+  1752                                  
+  1753                                  	; 29/05/2017
+  1754                                  	; 05/03/2017 (TRDOS 386)
+  1755                                  delay1_4ms:
+  1756 00000844 50                              push    eax 
+  1757 00000845 51                              push    ecx
+  1758                                          ;mov	cl, 16		; close enough.
+  1759 00000846 B10C                    	mov	cl, 12 ; + INT 34h delay	
+  1760                                  
+  1761                                  	;in	al, PORTB
+  1762                                  	
+  1763 00000848 66BA6100                	mov	dx, PORTB
+  1764 0000084C 28E4                    	sub	ah, ah ; 0 ; inb
+  1765 0000084E CD34                    	int	34h
+  1766                                  	
+  1767 00000850 2410                    	and	al, REFRESH_STATUS
+  1768 00000852 88C5                    	mov	ch, al		; Start toggle state
+  1769                                  _d4ms1:	
+  1770                                  	;in	al, PORTB	; Read system control port
+  1771                                  	
+  1772                                  	;mov	ah, 0 ; inb
+  1773                                  	;mov	dx, PORTB
+  1774 00000854 CD34                    	int	34h
+  1775                                  	
+  1776 00000856 2410                    	and	al, REFRESH_STATUS ; Refresh toggles 15.085 microseconds
+  1777 00000858 38C5                    	cmp	ch, al
+  1778 0000085A 74F8                    	je	short _d4ms1	; Wait for state change
+  1779                                  
+  1780 0000085C 88C5                    	mov	ch, al		; Update with new state
+  1781 0000085E FEC9                    	dec	cl
+  1782 00000860 75F2                    	jnz	short _d4ms1
+  1783                                  
+  1784 00000862 59                              pop     ecx
+  1785 00000863 58                              pop     eax
+  1786 00000864 C3                              retn
+  1787                                  
+  1788                                  ac97_int_ack:
+  1789                                  	; 30/07/2020
+  1790                                  	; Interrupt Handler for VIA VT8237R Audio Controller
+  1791                                  	;(Derived from TRDOS 386 kernel, 'audio.s', 14/10/2017)
+  1792                                  	; Note: I have moved following code here because
+  1793                                  	; callback service can not use int 35h (direct I/O) interrupt
+  1794                                  	; (we must check VT8233 interrupt status and
+  1795                                  	; clear/ack interrupt after callback service while [srb] = 1)
+  1796                                  
+  1797                                  	; 30/07/2020
+  1798                                  	; mov	byte [srb], 1
+  1799                                  
+  1800                                  	; [srb] = 1
+  1801                                  
+  1802                                  	; 29/07/2020
+  1803                                  	; 15/10/2017
+  1804                                  	; 14/10/2017 
+  1805                                  	; 09/10/2017, 10/10/2017, 12/10/2017
+  1806                                  	; 13/06/2017
+  1807                                  	; 21/04/2017 (TRDOS 386 kernel, 'audio.s')
+  1808                                  	; 24/03/2017 - 'PLAYER.COM' ('player.asm') 
+  1809                                  
+  1810                                  	;push	eax ; * must be saved !
+  1811                                  	;push	edx
+  1812                                  	;push	ecx
+  1813                                  	;push	ebx ; * must be saved !
+  1814                                  	;push	esi
+  1815                                  	;push	edi
+  1816                                  
+  1817                                  	; 14/10/2017
+  1818                                  	;mov	byte [srb], 1	
+  1819                                  
+  1820                                  	;cmp	byte [audio_busy], 1
+  1821                                  	;jnb	short _ih0 ; 09/10/2017
+  1822                                  
+  1823                                  	;mov	byte [audio_flag_eol], 0
+  1824                                  
+  1825 00000865 66BA0000                        mov     dx, VIADEV_PLAYBACK + VIA_REG_OFFSET_STATUS
+  1826 00000869 E8A9FCFFFF                      call    ctrl_io_r8
+  1827                                  
+  1828 0000086E A880                    	test    al, VIA_REG_STAT_ACTIVE
+  1829 00000870 7417                            jz      short _ih0 ; 09/10/2017
+  1830                                  
+  1831 00000872 2407                            and     al, VIA_REG_STAT_EOL + VIA_REG_STAT_FLAG + VIA_REG_STAT_STOPPED
+  1832 00000874 A2[040C0000]            	mov	[audio_flag_eol], al
+  1833 00000879 740E                            jz	short _ih0 ; 09/10/2017
+  1834                                  
+  1835                                  	; 09/10/2017
+  1836                                  	;mov	byte [audio_busy], 1
+  1837                                  
+  1838 0000087B 803D[030C0000]01        	cmp	byte [audio_play_cmd], 1
+  1839 00000882 7315                    	jnb	short _ih1 ; 10/10/2017
+  1840                                  
+  1841 00000884 E81DFDFFFF              	call	channel_reset
+  1842                                  _ih0:
+  1843                                  	; 09/10/2017
+  1844 00000889 A0[040C0000]                    mov     al, [audio_flag_eol]   ;; ack ;;
+  1845 0000088E 66BA0000                        mov     dx, VIADEV_PLAYBACK + VIA_REG_OFFSET_STATUS
+  1846 00000892 E874FCFFFF                      call    ctrl_io_w8
+  1847 00000897 EB15                    	jmp	short _ih3
+  1848                                  _ih1:
+  1849                                  vt8233_tuneLoop:
+  1850 00000899 A0[040C0000]                    mov     al, [audio_flag_eol]   ;; ack ;;
+  1851 0000089E 66BA0000                        mov     dx, VIADEV_PLAYBACK + VIA_REG_OFFSET_STATUS
+  1852 000008A2 E864FCFFFF                      call    ctrl_io_w8
+  1853                                  
+  1854                                  	; 29/07/2020
+  1855                                  	; 12/10/2017
+  1856                                  	;mov	byte [audio_flag], 0 ; Reset
+  1857                                  
+  1858                                  	; 10/10/2017
+  1859                                  	; 09/10/2017
+  1860                                  	;test	byte [audio_flag_eol], VIA_REG_STAT_FLAG
+  1861                                  	;jz	short _ih2 ; EOL
+  1862                                  
+  1863                                  	; 29/07/2020
+  1864                                  	; 14/10/2017
+  1865                                  	;test	byte [audio_flag_eol], VIA_REG_STAT_EOL
+  1866                                  	;jnz	short _ih2 ; EOL
+  1867                                  	;		   ; (Half Buffer 2 has been completed 
+  1868                                  	;		   ; and Half Buffer 1 will be played.)
+  1869                                  	
+  1870                                  	; FLAG  
+  1871                                  	; (Half Buffer 1 has been completed 
+  1872                                  	;  and Half Buffer 2 will be played.)
+  1873                                  
+  1874                                  	; 14/10/2017
+  1875                                  	;; (Continue to play.)
+  1876                                  	;mov	al, VIA_REG_CTRL_INT
+  1877                                         	;or	al, VIA_REG_CTRL_START
+  1878                                         	;mov	dx, VIADEV_PLAYBACK + VIA_REG_OFFSET_CONTROL
+  1879                                          ;call	ctrl_io_w8
+  1880                                  	; 12/10/2017
+  1881                                  	;mov	byte [audio_flag], 1 
+  1882                                  	; 29/07/2020
+  1883                                  	;inc	byte [audio_flag] ; = 1
+  1884                                  _ih2: 
+  1885                                  	; Update half buffer 2 while playing half buffer 1 (FLAG)
+  1886                                  	; Update half buffer 1 while playing half buffer 2 (EOL)
+  1887                                  	
+  1888                                  	; 30/07/2020
+  1889                                  	;mov 	al, [audio_flag]
+  1890                                  	;add	al, '1'
+  1891                                  	;mov	ah, 4Eh
+  1892                                  	;mov 	[0B8000h], ax ; Display current buffer number
+  1893                                  
+  1894                                  	; switch flag value ;
+  1895 000008A7 8035[050C0000]01        	xor	byte [audio_flag], 1 ; 10/10/2017 
+  1896                                  
+  1897                                  	; 12/10/2017
+  1898                                  	; [audio_flag] = 0 : Playing dma half buffer 2 (just after FLAG)
+  1899                                  			   ; Next buffer (to update) is dma half buff 1
+  1900                                  	; 	       = 1 : Playing dma half buffer 1 (just after EOL)
+  1901                                  			   ; Next buffer (to update) is dma half buff 2
+  1902                                  	; 30/07/2020
+  1903                                  	; 15/10/2017
+  1904                                  	;mov	byte [srb], 1
+  1905                                  _ih3:	
+  1906                                  	; 28/05/2017
+  1907                                  	;mov	byte [audio_busy], 0 ; 09/10/2017
+  1908                                  	;
+  1909                                  	;pop	edi
+  1910                                  	;pop	esi
+  1911                                  	;pop	ebx ; * must be restored !
+  1912                                  	;pop	ecx
+  1913                                  	;pop	edx
+  1914                                  	;pop	eax ; * must be restored !
+  1915                                  
+  1916                                  _ih4:	; 14/10/2017
+  1917                                  	;sys	_rele ; return from callback service 
+  1918                                  	;; we must not come here !
+  1919                                  	;sys	_exit
+  1920                                  
+  1921                                  	; 30/07/2020
+  1922 000008AE C3                      	retn
+  1923                                  
+  1924                                  ; ---------------------------------------------------------------------
+  1925                                  
+  1926                                  	; 05/03/2017 (TRDOS 386)
+  1927                                  	; 13/11/2016 - Erdogan Tan
+  1928                                  write_ac97_dev_info:
+  1929                                  	; BUS/DEV/FN
+  1930                                  	;	00000000BBBBBBBBDDDDDFFF00000000
+  1931                                  	; DEV/VENDOR
+  1932                                  	;	DDDDDDDDDDDDDDDDVVVVVVVVVVVVVVVV
+  1933                                  
+  1934 000008AF 8B35[0C0C0000]          	mov	esi, [dev_vendor]
+  1935 000008B5 6689F0                  	mov	ax, si
+  1936 000008B8 0FB6D8                  	movzx	ebx, al
+  1937 000008BB 88DA                    	mov	dl, bl
+  1938 000008BD 80E30F                  	and	bl, 0Fh
+  1939 000008C0 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  1940 000008C6 A2[6C0B0000]            	mov	[msgVendorId+3], al
+  1941 000008CB 88D3                    	mov	bl, dl
+  1942 000008CD C0EB04                  	shr	bl, 4
+  1943 000008D0 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  1944 000008D6 A2[6B0B0000]            	mov	[msgVendorId+2], al
+  1945 000008DB 88E3                    	mov	bl, ah
+  1946 000008DD 88DA                    	mov	dl, bl
+  1947 000008DF 80E30F                  	and	bl, 0Fh
+  1948 000008E2 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  1949 000008E8 A2[6A0B0000]            	mov	[msgVendorId+1], al
+  1950 000008ED 88D3                    	mov	bl, dl
+  1951 000008EF C0EB04                  	shr	bl, 4
+  1952 000008F2 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  1953 000008F8 A2[690B0000]            	mov	[msgVendorId], al
+  1954 000008FD C1EE10                  	shr	esi, 16
+  1955 00000900 6689F0                  	mov	ax, si
+  1956 00000903 88C3                    	mov	bl, al
+  1957 00000905 88DA                    	mov	dl, bl
+  1958 00000907 80E30F                  	and	bl, 0Fh
+  1959 0000090A 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  1960 00000910 A2[7D0B0000]            	mov	[msgDevId+3], al
+  1961 00000915 88D3                    	mov	bl, dl
+  1962 00000917 C0EB04                  	shr	bl, 4
+  1963 0000091A 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  1964 00000920 A2[7C0B0000]            	mov	[msgDevId+2], al
+  1965 00000925 88E3                    	mov	bl, ah
+  1966 00000927 88DA                    	mov	dl, bl
+  1967 00000929 80E30F                  	and	bl, 0Fh
+  1968 0000092C 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  1969 00000932 A2[7B0B0000]            	mov	[msgDevId+1], al
+  1970 00000937 88D3                    	mov	bl, dl
+  1971 00000939 C0EB04                  	shr	bl, 4
+  1972 0000093C 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  1973 00000942 A2[7A0B0000]            	mov	[msgDevId], al
+  1974                                  
+  1975 00000947 8B35[080C0000]          	mov	esi, [bus_dev_fn]
+  1976 0000094D C1EE08                  	shr	esi, 8
+  1977 00000950 6689F0                  	mov	ax, si
+  1978 00000953 88C3                    	mov	bl, al
+  1979 00000955 88DA                    	mov	dl, bl
+  1980 00000957 80E307                  	and	bl, 7 ; bit 0,1,2
+  1981 0000095A 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  1982 00000960 A2[A10B0000]            	mov	[msgFncNo+1], al
+  1983 00000965 88D3                    	mov	bl, dl
+  1984 00000967 C0EB03                  	shr	bl, 3
+  1985 0000096A 88DA                    	mov	dl, bl
+  1986 0000096C 80E30F                  	and	bl, 0Fh
+  1987 0000096F 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  1988 00000975 A2[930B0000]            	mov	[msgDevNo+1], al
+  1989 0000097A 88D3                    	mov	bl, dl
+  1990 0000097C C0EB04                  	shr	bl, 4
+  1991 0000097F 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  1992 00000985 A2[920B0000]            	mov	[msgDevNo], al
+  1993 0000098A 88E3                    	mov	bl, ah
+  1994 0000098C 88DA                    	mov	dl, bl
+  1995 0000098E 80E30F                  	and	bl, 0Fh
+  1996 00000991 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  1997 00000997 A2[870B0000]            	mov	[msgBusNo+1], al
+  1998 0000099C 88D3                    	mov	bl, dl
+  1999 0000099E C0EB04                  	shr	bl, 4
+  2000 000009A1 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  2001 000009A7 A2[860B0000]            	mov	[msgBusNo], al
+  2002                                  
+  2003 000009AC 66A1[140C0000]          	mov	ax, [ac97_io_base]
+  2004 000009B2 88C3                    	mov	bl, al
+  2005 000009B4 88DA                    	mov	dl, bl
+  2006 000009B6 80E30F                  	and	bl, 0Fh
+  2007 000009B9 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  2008 000009BF A2[BA0B0000]            	mov	[msgIOBaseAddr+3], al
+  2009 000009C4 88D3                    	mov	bl, dl
+  2010 000009C6 C0EB04                  	shr	bl, 4
+  2011 000009C9 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  2012 000009CF A2[B90B0000]            	mov	[msgIOBaseAddr+2], al
+  2013 000009D4 88E3                    	mov	bl, ah
+  2014 000009D6 88DA                    	mov	dl, bl
+  2015 000009D8 80E30F                  	and	bl, 0Fh
+  2016 000009DB 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  2017 000009E1 A2[B80B0000]            	mov	[msgIOBaseAddr+1], al
+  2018 000009E6 88D3                    	mov	bl, dl
+  2019 000009E8 C0EB04                  	shr	bl, 4
+  2020 000009EB 8A83[290B0000]          	mov	al, [ebx+hex_chars]
+  2021 000009F1 A2[B70B0000]            	mov	[msgIOBaseAddr], al
+  2022                                  
+  2023                                  	; 24/11/2016
+  2024 000009F6 30E4                    	xor	ah, ah
+  2025 000009F8 A0[160C0000]            	mov	al, [ac97_int_ln_reg]
+  2026 000009FD B10A                    	mov	cl, 10
+  2027 000009FF F6F1                    	div	cl
+  2028 00000A01 660105[C20B0000]        	add	[msgIRQ], ax
+  2029 00000A08 20C0                    	and	al, al
+  2030 00000A0A 750D                    	jnz	short _pmi
+  2031 00000A0C A0[C30B0000]            	mov	al, [msgIRQ+1]
+  2032 00000A11 B420                    	mov	ah, ' '
+  2033 00000A13 66A3[C20B0000]          	mov	[msgIRQ], ax
+  2034                                  _pmi:
+  2035                                  	; EBX = Message address
+  2036                                  	; ECX = Max. message length (or stop on ZERO character)
+  2037                                  	;	(1 to 255)
+  2038                                  	; DL  = Message color (07h = light gray, 0Fh = white) 
+  2039                                       	sys 	_msg, msgAC97Info, 255, 07h
+  2039                              <1> 
+  2039                              <1> 
+  2039                              <1> 
+  2039                              <1> 
+  2039                              <1>  %if %0 >= 2
+  2039 00000A19 BB[3A0B0000]        <1>  mov ebx, %2
+  2039                              <1>  %if %0 >= 3
+  2039 00000A1E B9FF000000          <1>  mov ecx, %3
+  2039                              <1>  %if %0 = 4
+  2039 00000A23 BA07000000          <1>  mov edx, %4
+  2039                              <1>  %endif
+  2039                              <1>  %endif
+  2039                              <1>  %endif
+  2039 00000A28 B823000000          <1>  mov eax, %1
+  2039                              <1> 
+  2039 00000A2D CD40                <1>  int 40h
+  2040 00000A2F C3                              retn
+  2041                                  
+  2042                                  ;=============================================================================
+  2043                                  ;               preinitialized data
+  2044                                  ;=============================================================================
+  2045                                  
+  2046                                  noDevMsg:
+  2047 00000A30 4572726F723A20556E-     	db "Error: Unable to find VIA VT8233 based audio device!",CR,LF,0
+  2047 00000A39 61626C6520746F2066-
+  2047 00000A42 696E64205649412056-
+  2047 00000A4B 543832333320626173-
+  2047 00000A54 656420617564696F20-
+  2047 00000A5D 646576696365210D0A-
+  2047 00000A66 00                 
+  2048                                  
+  2049                                  CodecErrMsg:
+  2050 00000A67 436F64656320457272-     	db	"Codec Error !", CR,LF,0
+  2050 00000A70 6F7220210D0A00     
+  2051                                  
+  2052                                  msg_usage:
+  2053 00000A77 75736167653A207761-     	db	'usage: wavplay filename.wav',10,13,0
+  2053 00000A80 76706C61792066696C-
+  2053 00000A89 656E616D652E776176-
+  2053 00000A92 0A0D00             
+  2054                                  Credits:
+  2055 00000A95 54696E792057415620-     	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
+  2055 00000A9E 506C6179657220666F-
+  2055 00000AA7 72205452444F532033-
+  2055 00000AB0 383620627920457264-
+  2055 00000AB9 6F67616E2054616E2E-
+  2055 00000AC2 20                 
+  2056 00000AC3 417567757374203230-     	db	'August 2020.',10,13,0
+  2056 00000ACC 32302E0A0D00       
+  2057 00000AD2 31352F31302F323031-     	db	'15/10/2017', 10,13,0
+  2057 00000ADB 370A0D00           
+  2058 00000ADF 30312F30382F323032-     	db	'01/08/2020', 10,13,0 
+  2058 00000AE8 300A0D00           
+  2059                                  
+  2060                                  noFileErrMsg:
+  2061 00000AEC 4572726F723A206669-     	db	'Error: file not found.',10,13,0
+  2061 00000AF5 6C65206E6F7420666F-
+  2061 00000AFE 756E642E0A0D00     
+  2062                                  
+  2063                                  trdos386_err_msg:
+  2064 00000B05 5452444F5320333836-     	db	'TRDOS 386 System call error !',10,13,0
+  2064 00000B0E 2053797374656D2063-
+  2064 00000B17 616C6C206572726F72-
+  2064 00000B20 20210A0D00         
+  2065                                  
+  2066                                  FileHandle:	
+  2067 00000B25 FFFFFFFF                	dd	-1
+  2068                                  
+  2069                                  ; 13/11/2016
+  2070 00000B29 303132333435363738-     hex_chars:	db "0123456789ABCDEF", 0
+  2070 00000B32 3941424344454600   
+  2071 00000B3A 414339372041756469-     msgAC97Info:	db "AC97 Audio Controller & Codec Info", 0Dh, 0Ah 
+  2071 00000B43 6F20436F6E74726F6C-
+  2071 00000B4C 6C6572202620436F64-
+  2071 00000B55 656320496E666F0D0A 
+  2072 00000B5E 56656E646F72204944-     		db "Vendor ID: "
+  2072 00000B67 3A20               
+  2073 00000B69 303030306820446576-     msgVendorId:	db "0000h Device ID: "
+  2073 00000B72 6963652049443A20   
+  2074 00000B7A 30303030680D0A          msgDevId:	db "0000h", 0Dh, 0Ah
+  2075 00000B81 4275733A20              		db "Bus: "
+  2076 00000B86 303068204465766963-     msgBusNo:	db "00h Device: "
+  2076 00000B8F 653A20             
+  2077 00000B92 3030682046756E6374-     msgDevNo:	db "00h Function: "
+  2077 00000B9B 696F6E3A20         
+  2078 00000BA0 303068                  msgFncNo:	db "00h"
+  2079 00000BA3 0D0A                    		db 0Dh, 0Ah
+  2080 00000BA5 492F4F204261736520-     		db "I/O Base Address: "
+  2080 00000BAE 416464726573733A20 
+  2081 00000BB7 303030306820495251-     msgIOBaseAddr:	db "0000h IRQ: "
+  2081 00000BC0 3A20               
+  2082 00000BC2 3030                    msgIRQ:		dw 3030h
+  2083 00000BC4 0D0A00                  		db 0Dh, 0Ah, 0
+  2084 00000BC7 53616D706C65205261-     msgSampleRate:	db "Sample Rate: "
+  2084 00000BD0 74653A20           
+  2085 00000BD4 303030303020487A20-     msgHertz:	db "00000 Hz ", 0
+  2085 00000BDD 00                 
+  2086 00000BDE 3820626974732000        msg8Bits:	db "8 bits ", 0
+  2087 00000BE6 4D6F6E6F0D0A00          msgMono:	db "Mono", 0Dh, 0Ah, 0
+  2088 00000BED 313620626974732024      msg16Bits:	db "16 bits ", "$" 
+  2089 00000BF6 53746572656F0D0A00      msgStereo:	db "Stereo", 0Dh, 0Ah, 0
+  2090                                  
+  2091                                  ;; 13/11/2016 - Erdogan Tan (Ref: KolibriOS, codec.inc)
+  2092                                  ;codec_id:	   dd 0
+  2093                                  ;codec_chip_id:	   dd 0
+  2094                                  ;codec_vendor_ids: dw 0
+  2095                                  ;codec_chip_ids:   dw 0
+  2096                                  
+  2097                                  ;dword_str:	dd 30303030h, 30303030h
+  2098                                  ;	 	db 'h', 0Dh, 0Ah, 0
+  2099                                  
+  2100                                  ;=============================================================================
+  2101                                  ;        	uninitialized data
+  2102                                  ;=============================================================================
+  2103                                  
+  2104                                  bss_start:
+  2105                                  
+  2106                                  ABSOLUTE bss_start
+  2107                                  
+  2108 00000BFF <res 00000001>          alignb 4
+  2109                                  
+  2110 00000C00 <res 00000001>          eof_flag:	resb 1
+  2111 00000C01 <res 00000001>          srb:		resb 1
+  2112 00000C02 <res 00000001>          audio_busy:	resb 1 
+  2113 00000C03 <res 00000001>          audio_play_cmd:	resb 1
+  2114                                  
+  2115 00000C04 <res 00000001>          audio_flag_eol:	resb 1
+  2116 00000C05 <res 00000001>          audio_flag:	resb 1
+  2117 00000C06 <res 00000002>          		resw 1
+  2118                                  
+  2119 00000C08 <res 00000004>          bus_dev_fn:	resd 1
+  2120 00000C0C <res 00000004>          dev_vendor:	resd 1
+  2121 00000C10 <res 00000004>          stats_cmd:	resd 1
+  2122                                  
+  2123 00000C14 <res 00000002>          ac97_io_base:	resw 1
+  2124 00000C16 <res 00000001>          ac97_int_ln_reg: resb 1 
+  2125 00000C17 <res 00000001>          		resb 1
+  2126                                  
+  2127                                  ; 14/10/2017 (audio_stmo, audio_bps, audio_freq)
+  2128                                  stmo:
+  2129 00000C18 <res 00000001>          audio_stmo: 	resb 1 ; stereo or mono  
+  2130                                  bps:
+  2131 00000C19 <res 00000001>          audio_bps: 	resb 1 ; bits per sample (16)
+  2132                                  sample_rate:
+  2133 00000C1A <res 00000002>          audio_freq:	resw 1
+  2134                                  
+  2135 00000C1C <res 0000001C>          smpRBuff:	resw 14 
+  2136                                  
+  2137                                  wav_file_name:
+  2138 00000C38 <res 00000050>          		resb 80
+  2139                                  alignb 4
+  2140                                  
+  2141 00000C88 <res 00000004>          BDL_phy_buff:	resd 1
+  2142 00000C8C <res 00000004>          DMA_phy_buff:	resd 1
+  2143                                  
+  2144                                  ; 14/10/2017
+  2145                                  audio_master_volume:
+  2146                                  ;audio_master_volume_l: resb 1 ; sound volume (lineout) left channel
+  2147                                  ;audio_master_volume_r: resb 1 ; sound volume (lineout) right channel
+  2148 00000C90 <res 00000001>          		resb 1
+  2149                                  volume_level:
+  2150 00000C91 <res 00000001>          		resb 1
+  2151                                  ; 01/08/2020
+  2152 00000C92 <res 00000001>          counter:	resb 1
+  2153                                  
+  2154 00000C93 <res 0000036D>          alignb 4096
+  2155                                  
+  2156 00001000 <res 00001000>          BdlBuffer:	resb 4096 ; BDL_SIZE (round up to 1 page)
+  2157                                  
+  2158 00002000 <res 0000E000>          alignb 65536
+  2159 00010000 <res 00010000>          DmaBuffer:	resb 65536 ; 2 * BUFFERSIZE
+  2160                                  EOF:

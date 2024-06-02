@@ -1,0 +1,1406 @@
+     1                                  ; ****************************************************************************
+     2                                  ; wavplay2.s (for TRDOS 386)
+     3                                  ; ----------------------------------------------------------------------------
+     4                                  ; WAVPLAY2.PRG ! VIA VT8237 .WAV PLAYER program by Erdogan TAN
+     5                                  ;
+     6                                  ; 17/03/2017
+     7                                  ;
+     8                                  ; [ Last Modification: 28/07/2020 ]
+     9                                  ;
+    10                                  ; Modified from PLAYWAV.PRG .wav player program by Erdogan Tan, 10/03/2017 
+    11                                  ;
+    12                                  ; Derived from source code of 'PLAYER.COM' ('PLAYER.ASM') by Erdogan Tan
+    13                                  ;	      (18/02/2017) 
+    14                                  ; Assembler: NASM version 2.11
+    15                                  ;	     nasm wavplay.asm -l wavplay.txt -o WAVPLAY.PRG	
+    16                                  ; ----------------------------------------------------------------------------
+    17                                  ; Derived from '.wav file player for DOS' Jeff Leyda, Sep 02, 2002
+    18                                  
+    19                                  ; CODE
+    20                                  
+    21                                  ; 01/03/2017
+    22                                  ; 16/10/2016
+    23                                  ; 29/04/2016
+    24                                  ; TRDOS 386 system calls (temporary list!)
+    25                                  _ver 	equ 0
+    26                                  _exit 	equ 1
+    27                                  _fork 	equ 2
+    28                                  _read 	equ 3
+    29                                  _write	equ 4
+    30                                  _open	equ 5
+    31                                  _close 	equ 6
+    32                                  _wait 	equ 7
+    33                                  _creat 	equ 8
+    34                                  _link 	equ 9
+    35                                  _unlink	equ 10
+    36                                  _exec	equ 11
+    37                                  _chdir	equ 12
+    38                                  _time 	equ 13
+    39                                  _mkdir 	equ 14
+    40                                  _chmod	equ 15
+    41                                  _chown	equ 16
+    42                                  _break	equ 17
+    43                                  _stat	equ 18
+    44                                  _seek	equ 19
+    45                                  _tell 	equ 20
+    46                                  _mount	equ 21
+    47                                  _umount	equ 22
+    48                                  _setuid	equ 23
+    49                                  _getuid	equ 24
+    50                                  _stime	equ 25
+    51                                  _quit	equ 26	
+    52                                  _intr	equ 27
+    53                                  _fstat	equ 28
+    54                                  _emt 	equ 29
+    55                                  _mdate 	equ 30
+    56                                  _video 	equ 31
+    57                                  _audio	equ 32
+    58                                  _timer	equ 33
+    59                                  _sleep	equ 34
+    60                                  _msg    equ 35
+    61                                  _geterr	equ 36
+    62                                  _fpsave	equ 37
+    63                                  _pri	equ 38
+    64                                  _rele	equ 39
+    65                                  _fff	equ 40
+    66                                  _fnf	equ 41
+    67                                  _alloc	equ 42
+    68                                  _dalloc equ 43
+    69                                  _calbac equ 44
+    70                                  
+    71                                  %macro sys 1-4
+    72                                      ; 29/04/2016 - TRDOS 386 (TRDOS v2.0)	
+    73                                      ; 03/09/2015	
+    74                                      ; 13/04/2015
+    75                                      ; Retro UNIX 386 v1 system call.	
+    76                                      %if %0 >= 2   
+    77                                          mov ebx, %2
+    78                                          %if %0 >= 3    
+    79                                              mov ecx, %3
+    80                                              %if %0 = 4
+    81                                                 mov edx, %4   
+    82                                              %endif
+    83                                          %endif
+    84                                      %endif
+    85                                      mov eax, %1
+    86                                      ;int 30h
+    87                                      int 40h ; TRDOS 386 (TRDOS v2.0)	   
+    88                                  %endmacro
+    89                                  
+    90                                  ; TRDOS 386 (and Retro UNIX 386 v1) system call format:
+    91                                  ; sys systemcall (eax) <arg1 (ebx)>, <arg2 (ecx)>, <arg3 (edx)>
+    92                                  
+    93                                  BUFFERSIZE      equ     32768	; audio buffer size 
+    94                                  ENDOFFILE       equ     1	; flag for knowing end of file
+    95                                  
+    96                                  [BITS 32]
+    97                                  
+    98                                  [ORG 0] 
+    99                                  
+   100                                  _STARTUP:
+   101                                  	; Prints the Credits Text.
+   102                                  	sys	_msg, Credits, 255, 0Bh
+   102                              <1> 
+   102                              <1> 
+   102                              <1> 
+   102                              <1> 
+   102                              <1>  %if %0 >= 2
+   102 00000000 BB[69060000]        <1>  mov ebx, %2
+   102                              <1>  %if %0 >= 3
+   102 00000005 B9FF000000          <1>  mov ecx, %3
+   102                              <1>  %if %0 = 4
+   102 0000000A BA0B000000          <1>  mov edx, %4
+   102                              <1>  %endif
+   102                              <1>  %endif
+   102                              <1>  %endif
+   102 0000000F B823000000          <1>  mov eax, %1
+   102                              <1> 
+   102 00000014 CD40                <1>  int 40h
+   103                                  
+   104                                  	; clear bss
+   105 00000016 B9[E2080000]            	mov	ecx, bss_end
+   106 0000001B BF[5E080000]            	mov	edi, bss_start
+   107 00000020 29F9                    	sub	ecx, edi
+   108 00000022 D1E9                    	shr	ecx, 1
+   109 00000024 31C0                    	xor	eax, eax
+   110 00000026 F366AB                  	rep	stosw
+   111                                  
+   112                                  	; Detect (& Enable) VT8233 Audio Device
+   113 00000029 E8BB010000              	call    DetectVT8233 
+   114 0000002E 731B                    	jnc     short GetFileName
+   115                                  
+   116                                  _dev_not_ready:
+   117                                  ; couldn't find the audio device!
+   118                                  	sys	_msg, noDevMsg, 255, 0Fh
+   118                              <1> 
+   118                              <1> 
+   118                              <1> 
+   118                              <1> 
+   118                              <1>  %if %0 >= 2
+   118 00000030 BB[FF060000]        <1>  mov ebx, %2
+   118                              <1>  %if %0 >= 3
+   118 00000035 B9FF000000          <1>  mov ecx, %3
+   118                              <1>  %if %0 = 4
+   118 0000003A BA0F000000          <1>  mov edx, %4
+   118                              <1>  %endif
+   118                              <1>  %endif
+   118                              <1>  %endif
+   118 0000003F B823000000          <1>  mov eax, %1
+   118                              <1> 
+   118 00000044 CD40                <1>  int 40h
+   119 00000046 E978010000                      jmp     Exit
+   120                                  
+   121                                  GetFileName:  
+   122 0000004B 89E6                    	mov	esi, esp
+   123 0000004D AD                      	lodsd
+   124 0000004E 83F802                  	cmp	eax, 2 ; two arguments 
+   125                                  	       ; (program file name & mod file name)
+   126 00000051 0F827A010000            	jb	pmsg_usage ; nothing to do
+   127                                  
+   128 00000057 AD                      	lodsd ; program file name address 
+   129 00000058 AD                      	lodsd ; mod file name address (file to be read)
+   130 00000059 89C6                    	mov	esi, eax
+   131 0000005B BF[84080000]            	mov	edi, wav_file_name
+   132                                  ScanName:       
+   133 00000060 AC                      	lodsb
+   134 00000061 84C0                    	test	al, al
+   135 00000063 0F8468010000            	je	pmsg_usage
+   136 00000069 3C20                    	cmp	al, 20h
+   137 0000006B 74F3                    	je	short ScanName	; scan start of name.
+   138 0000006D AA                      	stosb
+   139 0000006E B4FF                    	mov	ah, 0FFh
+   140                                  a_0:	
+   141 00000070 FEC4                    	inc	ah
+   142                                  a_1:
+   143 00000072 AC                      	lodsb
+   144 00000073 AA                      	stosb
+   145 00000074 3C2E                    	cmp	al, '.'
+   146 00000076 74F8                    	je	short a_0	
+   147 00000078 20C0                    	and	al, al
+   148 0000007A 75F6                    	jnz	short a_1
+   149                                  
+   150 0000007C 08E4                    	or	ah, ah		; if period NOT found,
+   151 0000007E 750B                    	jnz	short _1 	; then add a .WAV extension.
+   152                                  SetExt:
+   153 00000080 4F                      	dec	edi
+   154 00000081 C7072E574156            	mov	dword [edi], '.WAV'
+   155 00000087 C6470400                	mov	byte [edi+4], 0
+   156                                  _1:
+   157                                  	; Allocate Audio Buffer (for user)
+   158                                  	sys	_audio, 0200h, BUFFERSIZE, audio_buffer
+   158                              <1> 
+   158                              <1> 
+   158                              <1> 
+   158                              <1> 
+   158                              <1>  %if %0 >= 2
+   158 0000008B BB00020000          <1>  mov ebx, %2
+   158                              <1>  %if %0 >= 3
+   158 00000090 B900800000          <1>  mov ecx, %3
+   158                              <1>  %if %0 = 4
+   158 00000095 BA[00100000]        <1>  mov edx, %4
+   158                              <1>  %endif
+   158                              <1>  %endif
+   158                              <1>  %endif
+   158 0000009A B820000000          <1>  mov eax, %1
+   158                              <1> 
+   158 0000009F CD40                <1>  int 40h
+   159 000000A1 731B                    	jnc	short _2
+   160                                  error_exit:
+   161                                  	sys	_msg, trdos386_err_msg, 255, 0Eh
+   161                              <1> 
+   161                              <1> 
+   161                              <1> 
+   161                              <1> 
+   161                              <1>  %if %0 >= 2
+   161 000000A3 BB[4F070000]        <1>  mov ebx, %2
+   161                              <1>  %if %0 >= 3
+   161 000000A8 B9FF000000          <1>  mov ecx, %3
+   161                              <1>  %if %0 = 4
+   161 000000AD BA0E000000          <1>  mov edx, %4
+   161                              <1>  %endif
+   161                              <1>  %endif
+   161                              <1>  %endif
+   161 000000B2 B823000000          <1>  mov eax, %1
+   161                              <1> 
+   161 000000B7 CD40                <1>  int 40h
+   162 000000B9 E905010000              	jmp	Exit
+   163                                  _2:
+   164                                  	; DIRECT CGA (TEXT MODE) MEMORY ACCESS
+   165                                  	; bl = 0, bh = 4
+   166                                  	; Direct access/map to CGA (Text) memory (0B8000h)
+   167                                  
+   168                                  	sys	_video, 0400h
+   168                              <1> 
+   168                              <1> 
+   168                              <1> 
+   168                              <1> 
+   168                              <1>  %if %0 >= 2
+   168 000000BE BB00040000          <1>  mov ebx, %2
+   168                              <1>  %if %0 >= 3
+   168                              <1>  mov ecx, %3
+   168                              <1>  %if %0 = 4
+   168                              <1>  mov edx, %4
+   168                              <1>  %endif
+   168                              <1>  %endif
+   168                              <1>  %endif
+   168 000000C3 B81F000000          <1>  mov eax, %1
+   168                              <1> 
+   168 000000C8 CD40                <1>  int 40h
+   169 000000CA 3D00800B00              	cmp	eax, 0B8000h
+   170 000000CF 75D2                    	jne	short error_exit
+   171                                  
+   172                                  	; Initialize Audio Device
+   173                                  	sys	_audio, 0301h, 0, audio_int_handler 
+   173                              <1> 
+   173                              <1> 
+   173                              <1> 
+   173                              <1> 
+   173                              <1>  %if %0 >= 2
+   173 000000D1 BB01030000          <1>  mov ebx, %2
+   173                              <1>  %if %0 >= 3
+   173 000000D6 B900000000          <1>  mov ecx, %3
+   173                              <1>  %if %0 = 4
+   173 000000DB BA[8E020000]        <1>  mov edx, %4
+   173                              <1>  %endif
+   173                              <1>  %endif
+   173                              <1>  %endif
+   173 000000E0 B820000000          <1>  mov eax, %1
+   173                              <1> 
+   173 000000E5 CD40                <1>  int 40h
+   174 000000E7 72BA                    	jc	short error_exit
+   175                                  _3:
+   176 000000E9 E818030000              	call	write_audio_dev_info 
+   177                                  
+   178                                  ; open the file
+   179                                          ; open existing file
+   180 000000EE E803010000                      call    openFile ; no error? ok.
+   181 000000F3 731B                            jnc     short _gsr
+   182                                  
+   183                                  ; file not found!
+   184                                  	sys	_msg, noFileErrMsg, 255, 0Fh
+   184                              <1> 
+   184                              <1> 
+   184                              <1> 
+   184                              <1> 
+   184                              <1>  %if %0 >= 2
+   184 000000F5 BB[36070000]        <1>  mov ebx, %2
+   184                              <1>  %if %0 >= 3
+   184 000000FA B9FF000000          <1>  mov ecx, %3
+   184                              <1>  %if %0 = 4
+   184 000000FF BA0F000000          <1>  mov edx, %4
+   184                              <1>  %endif
+   184                              <1>  %endif
+   184                              <1>  %endif
+   184 00000104 B823000000          <1>  mov eax, %1
+   184                              <1> 
+   184 00000109 CD40                <1>  int 40h
+   185 0000010B E9B3000000                      jmp	Exit
+   186                                  
+   187                                  _gsr:  
+   188 00000110 E81B010000                     	call    getSampleRate	; read the sample rate
+   189                                                               	; pass it onto codec.
+   190 00000115 0F82A8000000            	jc	Exit
+   191                                  
+   192 0000011B 66A3[62080000]          	mov	[sample_rate], ax
+   193 00000121 880D[60080000]          	mov	[stmo], cl
+   194 00000127 8815[61080000]          	mov	[bps], dl
+   195                                  
+   196                                  	; 10/06/2017
+   197                                  	sys	_audio, 0E00h ; get audio controller info
+   197                              <1> 
+   197                              <1> 
+   197                              <1> 
+   197                              <1> 
+   197                              <1>  %if %0 >= 2
+   197 0000012D BB000E0000          <1>  mov ebx, %2
+   197                              <1>  %if %0 >= 3
+   197                              <1>  mov ecx, %3
+   197                              <1>  %if %0 = 4
+   197                              <1>  mov edx, %4
+   197                              <1>  %endif
+   197                              <1>  %endif
+   197                              <1>  %endif
+   197 00000132 B820000000          <1>  mov eax, %1
+   197                              <1> 
+   197 00000137 CD40                <1>  int 40h
+   198 00000139 0F8264FFFFFF            	jc	error_exit
+   199                                  
+   200                                  	;cmp	ah, 3 ; VT 8233? (VIA AC'97 Audio Controller)
+   201                                  	;jne	_dev_not_ready	
+   202                                  
+   203                                  	; EAX = IRQ Number in AL
+   204                                  	;	Audio Device Number in AH 
+   205                                  	; EBX = DEV/VENDOR ID
+   206                                  	;       (DDDDDDDDDDDDDDDDVVVVVVVVVVVVVVVV)
+   207                                  	; ECX = BUS/DEV/FN 
+   208                                  	;       (00000000BBBBBBBBDDDDDFFF00000000)
+   209                                  	; EDX = Base IO Addr (DX) for SB16 & VT8233
+   210                                  	; EDX = NABMBAR/NAMBAR (for AC97)
+   211                                  	;      (Low word, DX = NAMBAR address)
+   212                                  
+   213 0000013F A2[E0080000]            	mov	[ac97_int_ln_reg], al
+   214 00000144 891D[D6080000]          	mov	[dev_vendor], ebx
+   215 0000014A 890D[DA080000]          	mov	[bus_dev_fn], ecx
+   216 00000150 668915[DE080000]        	mov	[ac97_IO_base], dx
+   217                                    
+   218 00000157 E88C030000              	call	write_ac97_pci_dev_info
+   219                                  
+   220 0000015C E8BC020000              	call	write_wav_file_info
+   221                                  	
+   222                                  PlayNow: 
+   223                                  ;
+   224                                  ; position file pointer to start in actual wav data
+   225                                  ; MUCH improvement should really be done here to check if sample size is
+   226                                  ; supported, make sure there are 2 channels, etc.  
+   227                                  ;
+   228                                          ;mov     ah, 42h
+   229                                          ;mov     al, 0	; from start of file
+   230                                          ;mov     bx, [FileHandle]
+   231                                          ;xor     cx, cx
+   232                                          ;mov     dx, 44	; jump past .wav/riff header
+   233                                          ;int     21h
+   234                                  
+   235                                  	sys	_seek, [FileHandle], 44, 0
+   235                              <1> 
+   235                              <1> 
+   235                              <1> 
+   235                              <1> 
+   235                              <1>  %if %0 >= 2
+   235 00000161 8B1D[65060000]      <1>  mov ebx, %2
+   235                              <1>  %if %0 >= 3
+   235 00000167 B92C000000          <1>  mov ecx, %3
+   235                              <1>  %if %0 = 4
+   235 0000016C BA00000000          <1>  mov edx, %4
+   235                              <1>  %endif
+   235                              <1>  %endif
+   235                              <1>  %endif
+   235 00000171 B813000000          <1>  mov eax, %1
+   235                              <1> 
+   235 00000176 CD40                <1>  int 40h
+   236                                  
+   237                                  	sys	_msg, nextline, 255, 07h ; 01/05/2017
+   237                              <1> 
+   237                              <1> 
+   237                              <1> 
+   237                              <1> 
+   237                              <1>  %if %0 >= 2
+   237 00000178 BB[BB070000]        <1>  mov ebx, %2
+   237                              <1>  %if %0 >= 3
+   237 0000017D B9FF000000          <1>  mov ecx, %3
+   237                              <1>  %if %0 = 4
+   237 00000182 BA07000000          <1>  mov edx, %4
+   237                              <1>  %endif
+   237                              <1>  %endif
+   237                              <1>  %endif
+   237 00000187 B823000000          <1>  mov eax, %1
+   237                              <1> 
+   237 0000018C CD40                <1>  int 40h
+   238                                  
+   239                                  ; play the .wav file.  Most of the good stuff is in here.
+   240                                  
+   241 0000018E E873010000                      call    PlayWav
+   242                                  
+   243                                  ; close the .wav file and exit.
+   244                                  
+   245                                  StopPlaying:
+   246                                  	; Stop Playing
+   247                                  	sys	_audio, 0700h
+   247                              <1> 
+   247                              <1> 
+   247                              <1> 
+   247                              <1> 
+   247                              <1>  %if %0 >= 2
+   247 00000193 BB00070000          <1>  mov ebx, %2
+   247                              <1>  %if %0 >= 3
+   247                              <1>  mov ecx, %3
+   247                              <1>  %if %0 = 4
+   247                              <1>  mov edx, %4
+   247                              <1>  %endif
+   247                              <1>  %endif
+   247                              <1>  %endif
+   247 00000198 B820000000          <1>  mov eax, %1
+   247                              <1> 
+   247 0000019D CD40                <1>  int 40h
+   248                                  	; Cancel callback service (for user)
+   249                                  	sys	_audio, 0900h
+   249                              <1> 
+   249                              <1> 
+   249                              <1> 
+   249                              <1> 
+   249                              <1>  %if %0 >= 2
+   249 0000019F BB00090000          <1>  mov ebx, %2
+   249                              <1>  %if %0 >= 3
+   249                              <1>  mov ecx, %3
+   249                              <1>  %if %0 = 4
+   249                              <1>  mov edx, %4
+   249                              <1>  %endif
+   249                              <1>  %endif
+   249                              <1>  %endif
+   249 000001A4 B820000000          <1>  mov eax, %1
+   249                              <1> 
+   249 000001A9 CD40                <1>  int 40h
+   250                                  	; Deallocate Audio Buffer (for user)
+   251                                  	sys	_audio, 0A00h
+   251                              <1> 
+   251                              <1> 
+   251                              <1> 
+   251                              <1> 
+   251                              <1>  %if %0 >= 2
+   251 000001AB BB000A0000          <1>  mov ebx, %2
+   251                              <1>  %if %0 >= 3
+   251                              <1>  mov ecx, %3
+   251                              <1>  %if %0 = 4
+   251                              <1>  mov edx, %4
+   251                              <1>  %endif
+   251                              <1>  %endif
+   251                              <1>  %endif
+   251 000001B0 B820000000          <1>  mov eax, %1
+   251                              <1> 
+   251 000001B5 CD40                <1>  int 40h
+   252                                  	; Disable Audio Device
+   253                                  	sys	_audio, 0C00h
+   253                              <1> 
+   253                              <1> 
+   253                              <1> 
+   253                              <1> 
+   253                              <1>  %if %0 >= 2
+   253 000001B7 BB000C0000          <1>  mov ebx, %2
+   253                              <1>  %if %0 >= 3
+   253                              <1>  mov ecx, %3
+   253                              <1>  %if %0 = 4
+   253                              <1>  mov edx, %4
+   253                              <1>  %endif
+   253                              <1>  %endif
+   253                              <1>  %endif
+   253 000001BC B820000000          <1>  mov eax, %1
+   253                              <1> 
+   253 000001C1 CD40                <1>  int 40h
+   254                                  Exit:  
+   255 000001C3 E847000000                      call    closeFile
+   256                                           
+   257                                  	sys	_exit	; Bye!
+   257                              <1> 
+   257                              <1> 
+   257                              <1> 
+   257                              <1> 
+   257                              <1>  %if %0 >= 2
+   257                              <1>  mov ebx, %2
+   257                              <1>  %if %0 >= 3
+   257                              <1>  mov ecx, %3
+   257                              <1>  %if %0 = 4
+   257                              <1>  mov edx, %4
+   257                              <1>  %endif
+   257                              <1>  %endif
+   257                              <1>  %endif
+   257 000001C8 B801000000          <1>  mov eax, %1
+   257                              <1> 
+   257 000001CD CD40                <1>  int 40h
+   258                                  here:
+   259 000001CF EBFE                    	jmp	short here
+   260                                  
+   261                                  pmsg_usage:
+   262                                  	sys	_msg, msg_usage, 255, 0Bh
+   262                              <1> 
+   262                              <1> 
+   262                              <1> 
+   262                              <1> 
+   262                              <1>  %if %0 >= 2
+   262 000001D1 BB[E1060000]        <1>  mov ebx, %2
+   262                              <1>  %if %0 >= 3
+   262 000001D6 B9FF000000          <1>  mov ecx, %3
+   262                              <1>  %if %0 = 4
+   262 000001DB BA0B000000          <1>  mov edx, %4
+   262                              <1>  %endif
+   262                              <1>  %endif
+   262                              <1>  %endif
+   262 000001E0 B823000000          <1>  mov eax, %1
+   262                              <1> 
+   262 000001E5 CD40                <1>  int 40h
+   263 000001E7 EBDA                    	jmp	short Exit
+   264                                  
+   265                                  DetectVT8233:
+   266                                  	; Detect (BH=1) VT8233 (BL=3) Audio Controller
+   267                                          sys	_audio, 0103h
+   267                              <1> 
+   267                              <1> 
+   267                              <1> 
+   267                              <1> 
+   267                              <1>  %if %0 >= 2
+   267 000001E9 BB03010000          <1>  mov ebx, %2
+   267                              <1>  %if %0 >= 3
+   267                              <1>  mov ecx, %3
+   267                              <1>  %if %0 = 4
+   267                              <1>  mov edx, %4
+   267                              <1>  %endif
+   267                              <1>  %endif
+   267                              <1>  %endif
+   267 000001EE B820000000          <1>  mov eax, %1
+   267                              <1> 
+   267 000001F3 CD40                <1>  int 40h
+   268 000001F5 C3                      	retn
+   269                                  
+   270                                  ;open or create file
+   271                                  ;
+   272                                  ;input: ds:dx-->filename (asciiz)
+   273                                  ;       al=file Mode (create or open)
+   274                                  ;output: none  cs:[FileHandle] filled
+   275                                  ;
+   276                                  openFile:
+   277                                  	;mov	ah, 3Bh	; start with a mode
+   278                                  	;add	ah, al	; add in create or open mode
+   279                                  	;xor	cx, cx
+   280                                  	;int	21h
+   281                                  	;jc	short _of1
+   282                                  	;;mov	[cs:FileHandle], ax
+   283                                  
+   284                                  	sys	_open, wav_file_name, 0
+   284                              <1> 
+   284                              <1> 
+   284                              <1> 
+   284                              <1> 
+   284                              <1>  %if %0 >= 2
+   284 000001F6 BB[84080000]        <1>  mov ebx, %2
+   284                              <1>  %if %0 >= 3
+   284 000001FB B900000000          <1>  mov ecx, %3
+   284                              <1>  %if %0 = 4
+   284                              <1>  mov edx, %4
+   284                              <1>  %endif
+   284                              <1>  %endif
+   284                              <1>  %endif
+   284 00000200 B805000000          <1>  mov eax, %1
+   284                              <1> 
+   284 00000205 CD40                <1>  int 40h
+   285 00000207 7205                    	jc	short _of1
+   286                                  
+   287 00000209 A3[65060000]            	mov	[FileHandle], eax
+   288                                  _of1:
+   289 0000020E C3                      	retn
+   290                                  
+   291                                  ; close the currently open file
+   292                                  ; input: none, uses cs:[FileHandle]
+   293                                  closeFile:
+   294 0000020F 833D[65060000]FF        	cmp	dword [FileHandle], -1
+   295 00000216 7417                    	je	short _cf1
+   296                                  	;mov    bx, [FileHandle]  
+   297                                  	;mov    ax, 3E00h
+   298                                          ;int    21h              ;close file
+   299                                  
+   300                                  	sys	_close, [FileHandle]
+   300                              <1> 
+   300                              <1> 
+   300                              <1> 
+   300                              <1> 
+   300                              <1>  %if %0 >= 2
+   300 00000218 8B1D[65060000]      <1>  mov ebx, %2
+   300                              <1>  %if %0 >= 3
+   300                              <1>  mov ecx, %3
+   300                              <1>  %if %0 = 4
+   300                              <1>  mov edx, %4
+   300                              <1>  %endif
+   300                              <1>  %endif
+   300                              <1>  %endif
+   300 0000021E B806000000          <1>  mov eax, %1
+   300                              <1> 
+   300 00000223 CD40                <1>  int 40h
+   301 00000225 C705[65060000]FFFF-     	mov 	dword [FileHandle], -1
+   301 0000022D FFFF               
+   302                                  _cf1:
+   303 0000022F C3                      	retn
+   304                                  
+   305                                  getSampleRate:
+   306                                  	
+   307                                  ; reads the sample rate from the .wav file.
+   308                                  ; entry: none - assumes file is already open
+   309                                  ; exit: ax = sample rate (11025, 22050, 44100, 48000)
+   310                                  ;	cx = number of channels (mono=1, stereo=2)
+   311                                  ;	dx = bits per sample (8, 16)
+   312                                  
+   313 00000230 53                      	push    ebx
+   314                                  
+   315                                          ;mov	ah, 42h
+   316                                          ;mov	al, 0	; from start of file
+   317                                          ;mov	bx, [FileHandle]
+   318                                          ;xor	cx, cx
+   319                                          ;mov	dx, 08h	; "WAVE"
+   320                                          ;int	21h
+   321                                  	
+   322                                  	sys	_seek, [FileHandle], 8, 0
+   322                              <1> 
+   322                              <1> 
+   322                              <1> 
+   322                              <1> 
+   322                              <1>  %if %0 >= 2
+   322 00000231 8B1D[65060000]      <1>  mov ebx, %2
+   322                              <1>  %if %0 >= 3
+   322 00000237 B908000000          <1>  mov ecx, %3
+   322                              <1>  %if %0 = 4
+   322 0000023C BA00000000          <1>  mov edx, %4
+   322                              <1>  %endif
+   322                              <1>  %endif
+   322                              <1>  %endif
+   322 00000241 B813000000          <1>  mov eax, %1
+   322                              <1> 
+   322 00000246 CD40                <1>  int 40h
+   323                                  
+   324                                          ;mov	dx, smpRBuff
+   325                                          ;mov	cx, 28	; 28 bytes
+   326                                  	;mov	ah, 3fh
+   327                                          ;int	21h
+   328                                  
+   329                                  	sys	_read, [FileHandle], smpRBuff, 28
+   329                              <1> 
+   329                              <1> 
+   329                              <1> 
+   329                              <1> 
+   329                              <1>  %if %0 >= 2
+   329 00000248 8B1D[65060000]      <1>  mov ebx, %2
+   329                              <1>  %if %0 >= 3
+   329 0000024E B9[68080000]        <1>  mov ecx, %3
+   329                              <1>  %if %0 = 4
+   329 00000253 BA1C000000          <1>  mov edx, %4
+   329                              <1>  %endif
+   329                              <1>  %endif
+   329                              <1>  %endif
+   329 00000258 B803000000          <1>  mov eax, %1
+   329                              <1> 
+   329 0000025D CD40                <1>  int 40h
+   330                                  
+   331 0000025F 813D[68080000]5741-     	cmp	dword [smpRBuff], 'WAVE'
+   331 00000267 5645               
+   332 00000269 7520                    	jne	short gsr_stc
+   333                                  
+   334 0000026B 66833D[74080000]01      	cmp	word [smpRBuff+12], 1	; Offset 20, must be 1 (= PCM)
+   335 00000273 7516                    	jne	short gsr_stc
+   336                                  
+   337 00000275 668B0D[76080000]        	mov	cx, [smpRBuff+14]	; return num of channels in CX
+   338 0000027C 66A1[78080000]                  mov     ax, [smpRBuff+16]	; return sample rate in AX
+   339 00000282 668B15[82080000]        	mov	dx, [smpRBuff+26]	; return bits per sample value in DX
+   340                                  gsr_retn:
+   341 00000289 5B                              pop     ebx
+   342 0000028A C3                              retn
+   343                                  gsr_stc:
+   344 0000028B F9                      	stc
+   345 0000028C EBFB                    	jmp	short gsr_retn
+   346                                  
+   347                                  audio_int_handler:
+   348                                  	;cmp	byte [cbs_busy], 1
+   349                                  	;jnb	short _callback_bsy_retn
+   350                                  
+   351                                  	;mov	byte [cbs_busy], 1
+   352                                  
+   353 0000028E A0[65080000]            	mov	al, [half_buff]
+   354                                  
+   355 00000293 3C01                    	cmp	al, 1
+   356 00000295 721A                    	jb	short _callback_retn
+   357                                  
+   358                                  	; 14/10/2017
+   359 00000297 C605[67080000]01        	mov	byte [srb], 1
+   360                                  
+   361 0000029E 8035[65080000]03        	xor	byte [half_buff], 3 ; 2->1, 1->2
+   362                                  
+   363 000002A5 BB00800B00              	mov	ebx, 0B8000h ; video display page address
+   364 000002AA B44E                    	mov	ah, 4Eh
+   365 000002AC 0430                    	add	al, '0'
+   366 000002AE 668903                  	mov	[ebx], ax ; show playing buffer (1, 2)
+   367                                  _callback_retn:
+   368                                  	;mov	byte [cbs_busy], 0
+   369                                  _callback_bsy_retn:
+   370                                  	sys	_rele ; return from callback service 
+   370                              <1> 
+   370                              <1> 
+   370                              <1> 
+   370                              <1> 
+   370                              <1>  %if %0 >= 2
+   370                              <1>  mov ebx, %2
+   370                              <1>  %if %0 >= 3
+   370                              <1>  mov ecx, %3
+   370                              <1>  %if %0 = 4
+   370                              <1>  mov edx, %4
+   370                              <1>  %endif
+   370                              <1>  %endif
+   370                              <1>  %endif
+   370 000002B1 B827000000          <1>  mov eax, %1
+   370                              <1> 
+   370 000002B6 CD40                <1>  int 40h
+   371                                  	; we must not come here !
+   372                                  	sys	_exit
+   372                              <1> 
+   372                              <1> 
+   372                              <1> 
+   372                              <1> 
+   372                              <1>  %if %0 >= 2
+   372                              <1>  mov ebx, %2
+   372                              <1>  %if %0 >= 3
+   372                              <1>  mov ecx, %3
+   372                              <1>  %if %0 = 4
+   372                              <1>  mov edx, %4
+   372                              <1>  %endif
+   372                              <1>  %endif
+   372                              <1>  %endif
+   372 000002B8 B801000000          <1>  mov eax, %1
+   372                              <1> 
+   372 000002BD CD40                <1>  int 40h
+   373                                  	
+   374                                  loadFromFile:
+   375                                  	; 17/03/2017
+   376                                  	; edi = buffer address
+   377                                  	; edx = buffer size
+   378                                  	; 10/03/2017
+   379                                          ;push	eax
+   380                                          ;push	ecx
+   381                                          ;push	edx
+   382                                  	;push	ebx
+   383 000002BF F605[66080000]01                test    byte [flags], ENDOFFILE	; have we already read the
+   384 000002C6 F9                              stc			; last of the file?
+   385 000002C7 7531                            jnz     short endLFF
+   386                                  	;clc
+   387                                  	; load file into memory
+   388                                  	sys 	_read, [FileHandle], edi
+   388                              <1> 
+   388                              <1> 
+   388                              <1> 
+   388                              <1> 
+   388                              <1>  %if %0 >= 2
+   388 000002C9 8B1D[65060000]      <1>  mov ebx, %2
+   388                              <1>  %if %0 >= 3
+   388 000002CF 89F9                <1>  mov ecx, %3
+   388                              <1>  %if %0 = 4
+   388                              <1>  mov edx, %4
+   388                              <1>  %endif
+   388                              <1>  %endif
+   388                              <1>  %endif
+   388 000002D1 B803000000          <1>  mov eax, %1
+   388                              <1> 
+   388 000002D6 CD40                <1>  int 40h
+   389 000002D8 89D1                    	mov	ecx, edx
+   390 000002DA 720A                    	jc	short padfill ; error !
+   391 000002DC 21C0                    	and	eax, eax
+   392 000002DE 7406                    	jz	short padfill
+   393 000002E0 29C1                    	sub	ecx, eax
+   394 000002E2 7416                    	jz	short endLFF
+   395 000002E4 01C7                    	add	edi, eax  
+   396                                  padfill:
+   397 000002E6 803D[61080000]10        	cmp 	byte [bps], 16
+   398 000002ED 740C                    	je	short _5
+   399                                  	; Minimum Value = 0
+   400 000002EF 30C0                            xor     al, al
+   401 000002F1 F3AA                    	rep	stosb
+   402                                  _4:
+   403                                          ;clc			; don't exit with CY yet.
+   404 000002F3 800D[66080000]01                or	byte [flags], ENDOFFILE	; end of file flag
+   405                                  endLFF:
+   406                                  	;pop	ebx
+   407                                  	;pop	edx
+   408                                          ;pop	ecx
+   409                                          ;pop	eax
+   410 000002FA C3                              retn
+   411                                  _5:
+   412                                  	; Minimum value = 8000h (-32768)
+   413 000002FB D1E9                    	shr	ecx, 1 
+   414 000002FD 66B80080                	mov	ax, 8000h ; -32768
+   415 00000301 F366AB                  	rep	stosw
+   416 00000304 EBED                    	jmp	short _4
+   417                                  
+   418                                  PlayWav:
+   419                                         ; load 32768 bytes into audio buffer
+   420 00000306 BF[00100000]            	mov     edi, audio_buffer
+   421 0000030B BA00800000              	mov	edx, BUFFERSIZE
+   422 00000310 E8AAFFFFFF              	call	loadFromFile
+   423 00000315 0F8288FDFFFF            	jc	error_exit
+   424 0000031B C605[65080000]01        	mov	byte [half_buff], 1 ; Buffer 1
+   425                                  
+   426                                  	; 27/07/2020
+   427 00000322 F605[66080000]01        	test    byte [flags], ENDOFFILE  ; end of file
+   428 00000329 751B                    	jnz	short _6 ; yes
+   429                                  			 ; bypass filling dma half buffer 2
+   430                                  
+   431                                  	; bh = 16 : update (current, first) dma half buffer
+   432                                  	; bl = 0  : then switch to the next (second) half buffer
+   433                                  	sys	_audio, 1000h
+   433                              <1> 
+   433                              <1> 
+   433                              <1> 
+   433                              <1> 
+   433                              <1>  %if %0 >= 2
+   433 0000032B BB00100000          <1>  mov ebx, %2
+   433                              <1>  %if %0 >= 3
+   433                              <1>  mov ecx, %3
+   433                              <1>  %if %0 = 4
+   433                              <1>  mov edx, %4
+   433                              <1>  %endif
+   433                              <1>  %endif
+   433                              <1>  %endif
+   433 00000330 B820000000          <1>  mov eax, %1
+   433                              <1> 
+   433 00000335 CD40                <1>  int 40h
+   434                                  
+   435                                  	; 27/07/2020
+   436                                  	; [audio_flag] = 1  (in TRDOS 386 kernel)
+   437                                  
+   438                                  	; audio_buffer must be filled again after above system call 
+   439                                  	; (Because audio interrupt will be generated by VT8237R
+   440                                  	; at the end of the first half of dma buffer.. so, 
+   441                                  	; the second half must be ready. 'sound_play' will use it.)
+   442                                  
+   443                                  	; 13/10/2017
+   444 00000337 BF[00100000]            	mov     edi, audio_buffer
+   445 0000033C BA00800000              	mov	edx, BUFFERSIZE
+   446 00000341 E879FFFFFF              	call    loadFromFile
+   447                                  	;jc	short p_return ; 27/07/2020
+   448                                  _6:
+   449                                  	; Set Master Volume Level
+   450                                  	sys	_audio, 0B00h, 1D1Dh
+   450                              <1> 
+   450                              <1> 
+   450                              <1> 
+   450                              <1> 
+   450                              <1>  %if %0 >= 2
+   450 00000346 BB000B0000          <1>  mov ebx, %2
+   450                              <1>  %if %0 >= 3
+   450 0000034B B91D1D0000          <1>  mov ecx, %3
+   450                              <1>  %if %0 = 4
+   450                              <1>  mov edx, %4
+   450                              <1>  %endif
+   450                              <1>  %endif
+   450                              <1>  %endif
+   450 00000350 B820000000          <1>  mov eax, %1
+   450                              <1> 
+   450 00000355 CD40                <1>  int 40h
+   451                                  	; 24/06/2017
+   452                                  	;mov	byte [volume_level], 1Dh
+   453 00000357 880D[E1080000]          	mov	[volume_level], cl	
+   454                                  
+   455                                  	;mov	byte [srb], 0
+   456                                  
+   457                                  	; Start	to play
+   458 0000035D A0[61080000]            	mov	al, [bps]
+   459 00000362 C0E804                  	shr	al, 4 ; 8 -> 0, 16 -> 1
+   460 00000365 D0E0                    	shl	al, 1 ; 16 -> 2, 8 -> 0
+   461 00000367 8A1D[60080000]          	mov	bl, [stmo]
+   462 0000036D FECB                    	dec	bl
+   463 0000036F 08C3                    	or	bl, al
+   464 00000371 668B0D[62080000]        	mov	cx, [sample_rate] 
+   465 00000378 B704                    	mov	bh, 4 ; start to play	
+   466                                  	sys	_audio
+   466                              <1> 
+   466                              <1> 
+   466                              <1> 
+   466                              <1> 
+   466                              <1>  %if %0 >= 2
+   466                              <1>  mov ebx, %2
+   466                              <1>  %if %0 >= 3
+   466                              <1>  mov ecx, %3
+   466                              <1>  %if %0 = 4
+   466                              <1>  mov edx, %4
+   466                              <1>  %endif
+   466                              <1>  %endif
+   466                              <1>  %endif
+   466 0000037A B820000000          <1>  mov eax, %1
+   466                              <1> 
+   466 0000037F CD40                <1>  int 40h
+   467                                  
+   468                                  	; 27/07/2020
+   469                                  	; Here..
+   470                                  	; If byte [flags] <> ENDOFFILE ...
+   471                                  	; user's audio_buffer has been copied to dma half buffer 2
+   472                                  
+   473                                  	; [audio_flag] = 0  (in TRDOS 386 kernel)
+   474                                  
+   475                                  	; audio_buffer must be filled again after above system call 
+   476                                  	; (Because, audio interrupt will be generated by VT8237R
+   477                                  	; at the end of the first half of dma buffer.. so, 
+   478                                  	; the 2nd half of dma buffer is ready but the 1st half
+   479                                  	; must be filled again.)
+   480                                  
+   481                                  	; 27/07/2020
+   482 00000381 F605[66080000]01        	test    byte [flags], ENDOFFILE  ; end of file
+   483 00000388 750F                    	jnz	short p_loop ; yes
+   484                                  
+   485                                  	; 13/10/2017
+   486 0000038A BF[00100000]            	mov     edi, audio_buffer
+   487 0000038F BA00800000              	mov	edx, BUFFERSIZE
+   488 00000394 E826FFFFFF              	call    loadFromFile
+   489                                  	;jc	short p_return ; 27/07/2020
+   490                                  
+   491                                  	; we need to wait for 'SRB' (audio interrupt)
+   492                                  	; (we can not return from 'PlayWav' here 
+   493                                  	;  even if we have got an error from file reading)
+   494                                  	; ((!!current audio data must be played!!))
+   495                                  
+   496                                  	;mov	ebx, 0B8000h ; video display page address
+   497                                  	;mov	ah, 4Eh
+   498                                  	;add	al, [half_buffer]
+   499                                  	;mov	[ebx], ax ; show playing buffer (1, 2)
+   500                                  
+   501                                  	;; load 32768 bytes into audio buffer
+   502                                  	;; (for the second half of DMA buffer)
+   503                                  	;; 20/05/2017
+   504                                  	;mov	edi, audio_buffer
+   505                                  	;mov	edx, BUFFERSIZE
+   506                                  	;call	loadFromFile
+   507                                  	;jc	short p_return
+   508                                  	;mov	byte [half_buff], 2 ; (DMA) Buffer 2
+   509                                  
+   510                                  p_loop:
+   511                                  	; 14/10/2017
+   512                                  	; 24/06/2017
+   513 00000399 803D[67080000]00        	cmp	byte [srb], 0
+   514 000003A0 7618                    	jna	short q_loop
+   515 000003A2 C605[67080000]00        	mov	byte [srb], 0
+   516 000003A9 BF[00100000]            	mov     edi, audio_buffer
+   517 000003AE BA00800000              	mov	edx, BUFFERSIZE
+   518 000003B3 E807FFFFFF              	call    loadFromFile
+   519 000003B8 7212                    	jc	short p_return
+   520                                  q_loop:
+   521 000003BA B401                    	mov     ah, 1		; any key pressed?
+   522 000003BC CD32                    	int     32h		; no, Loop.
+   523 000003BE 74D9                    	jz	short p_loop
+   524                                  
+   525 000003C0 B400                    	mov     ah, 0		; flush key buffer...
+   526 000003C2 CD32                    	int     32h
+   527                                  	
+   528 000003C4 3C2B                    	cmp	al, '+' ; increase sound volume
+   529 000003C6 740C                    	je	short inc_volume_level
+   530 000003C8 3C2D                    	cmp	al, '-'
+   531 000003CA 742B                    	je	short dec_volume_level
+   532                                  
+   533                                  p_return:
+   534 000003CC C605[65080000]00        	mov	byte [half_buff], 0
+   535 000003D3 C3                      	retn
+   536                                  	
+   537                                  	; 14/10/2017
+   538                                  	; 24/06/2017
+   539                                  inc_volume_level:
+   540 000003D4 8A0D[E1080000]          	mov	cl, [volume_level]
+   541 000003DA 80F91F                  	cmp	cl, 1Fh ; 31
+   542 000003DD 73DB                    	jnb	short q_loop
+   543 000003DF FEC1                    	inc	cl
+   544                                  change_volume_level:
+   545 000003E1 880D[E1080000]          	mov	[volume_level], cl
+   546 000003E7 88CD                    	mov	ch, cl
+   547                                  	; Set Master Volume Level
+   548                                  	sys	_audio, 0B00h
+   548                              <1> 
+   548                              <1> 
+   548                              <1> 
+   548                              <1> 
+   548                              <1>  %if %0 >= 2
+   548 000003E9 BB000B0000          <1>  mov ebx, %2
+   548                              <1>  %if %0 >= 3
+   548                              <1>  mov ecx, %3
+   548                              <1>  %if %0 = 4
+   548                              <1>  mov edx, %4
+   548                              <1>  %endif
+   548                              <1>  %endif
+   548                              <1>  %endif
+   548 000003EE B820000000          <1>  mov eax, %1
+   548                              <1> 
+   548 000003F3 CD40                <1>  int 40h
+   549 000003F5 EBA2                    	jmp	short p_loop
+   550                                  dec_volume_level:
+   551 000003F7 8A0D[E1080000]          	mov	cl, [volume_level]
+   552 000003FD 80F901                  	cmp	cl, 1 ; 1
+   553 00000400 7697                    	jna	short p_loop
+   554 00000402 FEC9                    	dec	cl
+   555 00000404 EBDB                    	jmp	short change_volume_level
+   556                                  
+   557                                  write_audio_dev_info:
+   558                                  	; EBX = Message address
+   559                                  	; ECX = Max. message length (or stop on ZERO character)
+   560                                  	;	(1 to 255)
+   561                                  	; DL  = Message color (07h = light gray, 0Fh = white) 
+   562                                       	sys 	_msg, msgAudioDevInfo, 255, 0Fh
+   562                              <1> 
+   562                              <1> 
+   562                              <1> 
+   562                              <1> 
+   562                              <1>  %if %0 >= 2
+   562 00000406 BB[BE060000]        <1>  mov ebx, %2
+   562                              <1>  %if %0 >= 3
+   562 0000040B B9FF000000          <1>  mov ecx, %3
+   562                              <1>  %if %0 = 4
+   562 00000410 BA0F000000          <1>  mov edx, %4
+   562                              <1>  %endif
+   562                              <1>  %endif
+   562                              <1>  %endif
+   562 00000415 B823000000          <1>  mov eax, %1
+   562                              <1> 
+   562 0000041A CD40                <1>  int 40h
+   563 0000041C C3                              retn
+   564                                  
+   565                                  write_wav_file_info:
+   566                                  	; 01/05/2017
+   567                                  	sys	_msg, msgWavFileName, 255, 0Fh
+   567                              <1> 
+   567                              <1> 
+   567                              <1> 
+   567                              <1> 
+   567                              <1>  %if %0 >= 2
+   567 0000041D BB[6F070000]        <1>  mov ebx, %2
+   567                              <1>  %if %0 >= 3
+   567 00000422 B9FF000000          <1>  mov ecx, %3
+   567                              <1>  %if %0 = 4
+   567 00000427 BA0F000000          <1>  mov edx, %4
+   567                              <1>  %endif
+   567                              <1>  %endif
+   567                              <1>  %endif
+   567 0000042C B823000000          <1>  mov eax, %1
+   567                              <1> 
+   567 00000431 CD40                <1>  int 40h
+   568                                  	sys	_msg, wav_file_name, 255, 0Fh
+   568                              <1> 
+   568                              <1> 
+   568                              <1> 
+   568                              <1> 
+   568                              <1>  %if %0 >= 2
+   568 00000433 BB[84080000]        <1>  mov ebx, %2
+   568                              <1>  %if %0 >= 3
+   568 00000438 B9FF000000          <1>  mov ecx, %3
+   568                              <1>  %if %0 = 4
+   568 0000043D BA0F000000          <1>  mov edx, %4
+   568                              <1>  %endif
+   568                              <1>  %endif
+   568                              <1>  %endif
+   568 00000442 B823000000          <1>  mov eax, %1
+   568                              <1> 
+   568 00000447 CD40                <1>  int 40h
+   569                                  
+   570                                  write_sample_rate:
+   571                                  	; 01/05/2017
+   572 00000449 66A1[62080000]          	mov	ax, [sample_rate]
+   573                                  	; ax = sample rate (hertz)
+   574 0000044F 31D2                    	xor	edx, edx
+   575 00000451 66B90A00                	mov	cx, 10
+   576 00000455 66F7F1                  	div	cx
+   577 00000458 0015[94070000]          	add	[msgHertz+4], dl
+   578 0000045E 29D2                    	sub	edx, edx
+   579 00000460 66F7F1                  	div	cx
+   580 00000463 0015[93070000]          	add	[msgHertz+3], dl
+   581 00000469 29D2                    	sub	edx, edx
+   582 0000046B 66F7F1                  	div	cx
+   583 0000046E 0015[92070000]          	add	[msgHertz+2], dl
+   584 00000474 29D2                    	sub	edx, edx
+   585 00000476 66F7F1                  	div	cx
+   586 00000479 0015[91070000]          	add	[msgHertz+1], dl
+   587 0000047F 0005[90070000]          	add	[msgHertz], al
+   588                                  	
+   589                                  	sys	_msg, msgSampleRate, 255, 0Fh
+   589                              <1> 
+   589                              <1> 
+   589                              <1> 
+   589                              <1> 
+   589                              <1>  %if %0 >= 2
+   589 00000485 BB[81070000]        <1>  mov ebx, %2
+   589                              <1>  %if %0 >= 3
+   589 0000048A B9FF000000          <1>  mov ecx, %3
+   589                              <1>  %if %0 = 4
+   589 0000048F BA0F000000          <1>  mov edx, %4
+   589                              <1>  %endif
+   589                              <1>  %endif
+   589                              <1>  %endif
+   589 00000494 B823000000          <1>  mov eax, %1
+   589                              <1> 
+   589 00000499 CD40                <1>  int 40h
+   590                                  
+   591 0000049B BE[AB070000]            	mov	esi, msg16Bits
+   592 000004A0 803D[61080000]10        	cmp	byte [bps], 16
+   593 000004A7 7405                    	je	short wsr_1
+   594 000004A9 BE[9B070000]            	mov	esi, msg8Bits
+   595                                  wsr_1:
+   596                                  	sys	_msg, esi, 255, 0Fh
+   596                              <1> 
+   596                              <1> 
+   596                              <1> 
+   596                              <1> 
+   596                              <1>  %if %0 >= 2
+   596 000004AE 89F3                <1>  mov ebx, %2
+   596                              <1>  %if %0 >= 3
+   596 000004B0 B9FF000000          <1>  mov ecx, %3
+   596                              <1>  %if %0 = 4
+   596 000004B5 BA0F000000          <1>  mov edx, %4
+   596                              <1>  %endif
+   596                              <1>  %endif
+   596                              <1>  %endif
+   596 000004BA B823000000          <1>  mov eax, %1
+   596                              <1> 
+   596 000004BF CD40                <1>  int 40h
+   597                                  
+   598 000004C1 BE[A4070000]            	mov	esi, msgMono
+   599 000004C6 803D[60080000]01        	cmp	byte [stmo], 1
+   600 000004CD 7405                    	je	short wsr_2
+   601 000004CF BE[B5070000]            	mov	esi, msgStereo		
+   602                                  wsr_2:
+   603                                  	sys	_msg, esi, 255, 0Fh
+   603                              <1> 
+   603                              <1> 
+   603                              <1> 
+   603                              <1> 
+   603                              <1>  %if %0 >= 2
+   603 000004D4 89F3                <1>  mov ebx, %2
+   603                              <1>  %if %0 >= 3
+   603 000004D6 B9FF000000          <1>  mov ecx, %3
+   603                              <1>  %if %0 = 4
+   603 000004DB BA0F000000          <1>  mov edx, %4
+   603                              <1>  %endif
+   603                              <1>  %endif
+   603                              <1>  %endif
+   603 000004E0 B823000000          <1>  mov eax, %1
+   603                              <1> 
+   603 000004E5 CD40                <1>  int 40h
+   604 000004E7 C3                              retn
+   605                                  
+   606                                  write_ac97_pci_dev_info:
+   607                                  	; 06/06/2017
+   608                                  	; 03/06/2017
+   609                                  	; BUS/DEV/FN
+   610                                  	;	00000000BBBBBBBBDDDDDFFF00000000
+   611                                  	; DEV/VENDOR
+   612                                  	;	DDDDDDDDDDDDDDDDVVVVVVVVVVVVVVVV
+   613                                  
+   614 000004E8 8B35[D6080000]          	mov	esi, [dev_vendor]
+   615 000004EE 89F0                    	mov	eax, esi
+   616 000004F0 0FB6D8                  	movzx	ebx, al
+   617 000004F3 88DA                    	mov	dl, bl
+   618 000004F5 80E30F                  	and	bl, 0Fh
+   619 000004F8 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   620 000004FE A2[03080000]            	mov	[msgVendorId+3], al
+   621 00000503 88D3                    	mov	bl, dl
+   622 00000505 C0EB04                  	shr	bl, 4
+   623 00000508 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   624 0000050E A2[02080000]            	mov	[msgVendorId+2], al
+   625 00000513 88E3                    	mov	bl, ah
+   626 00000515 88DA                    	mov	dl, bl
+   627 00000517 80E30F                  	and	bl, 0Fh
+   628 0000051A 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   629 00000520 A2[01080000]            	mov	[msgVendorId+1], al
+   630 00000525 88D3                    	mov	bl, dl
+   631 00000527 C0EB04                  	shr	bl, 4
+   632 0000052A 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   633 00000530 A2[00080000]            	mov	[msgVendorId], al
+   634 00000535 C1E810                  	shr	eax, 16
+   635 00000538 88C3                    	mov	bl, al
+   636 0000053A 88DA                    	mov	dl, bl
+   637 0000053C 80E30F                  	and	bl, 0Fh
+   638 0000053F 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   639 00000545 A2[14080000]            	mov	[msgDevId+3], al
+   640 0000054A 88D3                    	mov	bl, dl
+   641 0000054C C0EB04                  	shr	bl, 4
+   642 0000054F 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   643 00000555 A2[13080000]            	mov	[msgDevId+2], al
+   644 0000055A 88E3                    	mov	bl, ah
+   645 0000055C 88DA                    	mov	dl, bl
+   646 0000055E 80E30F                  	and	bl, 0Fh
+   647 00000561 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   648 00000567 A2[12080000]            	mov	[msgDevId+1], al
+   649 0000056C 88D3                    	mov	bl, dl
+   650 0000056E C0EB04                  	shr	bl, 4
+   651 00000571 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   652 00000577 A2[11080000]            	mov	[msgDevId], al
+   653                                  
+   654 0000057C 8B35[DA080000]          	mov	esi, [bus_dev_fn]
+   655 00000582 C1EE08                  	shr	esi, 8
+   656 00000585 6689F0                  	mov	ax, si
+   657 00000588 88C3                    	mov	bl, al
+   658 0000058A 88DA                    	mov	dl, bl
+   659 0000058C 80E307                  	and	bl, 7 ; bit 0,1,2
+   660 0000058F 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   661 00000595 A2[38080000]            	mov	[msgFncNo+1], al
+   662 0000059A 88D3                    	mov	bl, dl
+   663 0000059C C0EB03                  	shr	bl, 3
+   664 0000059F 88DA                    	mov	dl, bl
+   665 000005A1 80E30F                  	and	bl, 0Fh
+   666 000005A4 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   667 000005AA A2[2A080000]            	mov	[msgDevNo+1], al
+   668 000005AF 88D3                    	mov	bl, dl
+   669 000005B1 C0EB04                  	shr	bl, 4
+   670 000005B4 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   671 000005BA A2[29080000]            	mov	[msgDevNo], al
+   672 000005BF 88E3                    	mov	bl, ah
+   673 000005C1 88DA                    	mov	dl, bl
+   674 000005C3 80E30F                  	and	bl, 0Fh
+   675 000005C6 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   676 000005CC A2[1E080000]            	mov	[msgBusNo+1], al
+   677 000005D1 88D3                    	mov	bl, dl
+   678 000005D3 C0EB04                  	shr	bl, 4
+   679 000005D6 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   680 000005DC A2[1D080000]            	mov	[msgBusNo], al
+   681                                  
+   682 000005E1 66A1[DE080000]          	mov	ax, [ac97_IO_base]
+   683 000005E7 88C3                    	mov	bl, al
+   684 000005E9 88DA                    	mov	dl, bl
+   685 000005EB 80E30F                  	and	bl, 0Fh
+   686 000005EE 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   687 000005F4 A2[50080000]            	mov	[msgBaseAddr+3], al
+   688 000005F9 88D3                    	mov	bl, dl
+   689 000005FB C0EB04                  	shr	bl, 4
+   690 000005FE 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   691 00000604 A2[4F080000]            	mov	[msgBaseAddr+2], al
+   692 00000609 88E3                    	mov	bl, ah
+   693 0000060B 88DA                    	mov	dl, bl
+   694 0000060D 80E30F                  	and	bl, 0Fh
+   695 00000610 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   696 00000616 A2[4E080000]            	mov	[msgBaseAddr+1], al
+   697 0000061B 88D3                    	mov	bl, dl
+   698 0000061D C0EB04                  	shr	bl, 4
+   699 00000620 8A83[BE070000]          	mov	al, [ebx+hex_chars]
+   700 00000626 A2[4D080000]            	mov	[msgBaseAddr], al
+   701                                  
+   702 0000062B 30E4                    	xor	ah, ah
+   703 0000062D A0[E0080000]            	mov	al, [ac97_int_ln_reg]
+   704 00000632 B10A                    	mov	cl, 10
+   705 00000634 F6F1                    	div	cl
+   706 00000636 660105[59080000]        	add	[msgIRQ], ax
+   707 0000063D 20C0                    	and	al, al
+   708 0000063F 750D                    	jnz	short _w_ac97imsg_
+   709 00000641 A0[5A080000]            	mov	al, [msgIRQ+1]
+   710 00000646 B420                    	mov	ah, ' '
+   711 00000648 66A3[59080000]          	mov	[msgIRQ], ax
+   712                                  _w_ac97imsg_:
+   713                                  	sys	_msg, msgAC97Info, 255, 07h
+   713                              <1> 
+   713                              <1> 
+   713                              <1> 
+   713                              <1> 
+   713                              <1>  %if %0 >= 2
+   713 0000064E BB[CF070000]        <1>  mov ebx, %2
+   713                              <1>  %if %0 >= 3
+   713 00000653 B9FF000000          <1>  mov ecx, %3
+   713                              <1>  %if %0 = 4
+   713 00000658 BA07000000          <1>  mov edx, %4
+   713                              <1>  %endif
+   713                              <1>  %endif
+   713                              <1>  %endif
+   713 0000065D B823000000          <1>  mov eax, %1
+   713                              <1> 
+   713 00000662 CD40                <1>  int 40h
+   714                                  
+   715 00000664 C3                              retn
+   716                                  
+   717                                  ; DATA
+   718                                  
+   719                                  FileHandle:	
+   720 00000665 FFFFFFFF                	dd	-1
+   721                                  
+   722                                  Credits:
+   723 00000669 54696E792057415620-     	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
+   723 00000672 506C6179657220666F-
+   723 0000067B 72205452444F532033-
+   723 00000684 383620627920457264-
+   723 0000068D 6F67616E2054616E2E-
+   723 00000696 20                 
+   724 00000697 4A756C792032303230-     	db	'July 2020.',10,13,0
+   724 000006A0 2E0A0D00           
+   725 000006A4 31342F31302F323031-     	db	'14/10/2017', 10,13,0
+   725 000006AD 370A0D00           
+   726 000006B1 32382F30372F323032-     	db	'28/07/2020', 10,13,0 
+   726 000006BA 300A0D00           
+   727                                  
+   728                                  msgAudioDevInfo:
+   729 000006BE 666F72205649412056-     	db 	'for VIA VT8233 Audio Controller.', 10,13,0
+   729 000006C7 543832333320417564-
+   729 000006D0 696F20436F6E74726F-
+   729 000006D9 6C6C65722E0A0D00   
+   730                                  
+   731                                  msg_usage:
+   732 000006E1 75736167653A207761-     	db	'usage: wavplay filename.wav',10,13,0
+   732 000006EA 76706C61792066696C-
+   732 000006F3 656E616D652E776176-
+   732 000006FC 0A0D00             
+   733                                  
+   734                                  noDevMsg:
+   735 000006FF 4572726F723A20556E-     	db	'Error: Unable to find VIA VT8233 based audio device!'
+   735 00000708 61626C6520746F2066-
+   735 00000711 696E64205649412056-
+   735 0000071A 543832333320626173-
+   735 00000723 656420617564696F20-
+   735 0000072C 64657669636521     
+   736 00000733 0A0D00                  	db	10,13,0
+   737                                  
+   738                                  noFileErrMsg:
+   739 00000736 4572726F723A206669-     	db	'Error: file not found.',10,13,0
+   739 0000073F 6C65206E6F7420666F-
+   739 00000748 756E642E0A0D00     
+   740                                  
+   741                                  trdos386_err_msg:
+   742 0000074F 5452444F5320333836-     	db	'TRDOS 386 System call error !',10,13,0
+   742 00000758 2053797374656D2063-
+   742 00000761 616C6C206572726F72-
+   742 0000076A 20210A0D00         
+   743                                  
+   744                                  ; 10/06/2017
+   745 0000076F 0D0A5741562046696C-     msgWavFileName:	db 0Dh, 0Ah, "WAV File Name: ",0
+   745 00000778 65204E616D653A2000 
+   746 00000781 0D0A53616D706C6520-     msgSampleRate:	db 0Dh, 0Ah, "Sample Rate: "
+   746 0000078A 526174653A20       
+   747 00000790 303030303020487A2C-     msgHertz:	db "00000 Hz, ", 0 
+   747 00000799 2000               
+   748 0000079B 3820626974732C2000      msg8Bits:	db "8 bits, ", 0 
+   749 000007A4 4D6F6E6F0D0A00          msgMono:	db "Mono", 0Dh, 0Ah, 0
+   750 000007AB 313620626974732C20-     msg16Bits:	db "16 bits, ", 0 
+   750 000007B4 00                 
+   751 000007B5 53746572656F            msgStereo:	db "Stereo"
+   752 000007BB 0D0A00                  nextline:	db 0Dh, 0Ah, 0
+   753                                  
+   754                                  ; 03/06/2017
+   755 000007BE 303132333435363738-     hex_chars	db "0123456789ABCDEF", 0
+   755 000007C7 3941424344454600   
+   756 000007CF 0D0A                    msgAC97Info	db 0Dh, 0Ah
+   757 000007D1 414339372041756469-     		db "AC97 Audio Controller & Codec Info", 0Dh, 0Ah 
+   757 000007DA 6F20436F6E74726F6C-
+   757 000007E3 6C6572202620436F64-
+   757 000007EC 656320496E666F0D0A 
+   758 000007F5 56656E646F72204944-     		db "Vendor ID: "
+   758 000007FE 3A20               
+   759 00000800 303030306820446576-     msgVendorId	db "0000h Device ID: "
+   759 00000809 6963652049443A20   
+   760 00000811 30303030680D0A          msgDevId	db "0000h", 0Dh, 0Ah
+   761 00000818 4275733A20              		db "Bus: "
+   762 0000081D 303068204465766963-     msgBusNo	db "00h Device: "
+   762 00000826 653A20             
+   763 00000829 3030682046756E6374-     msgDevNo	db "00h Function: "
+   763 00000832 696F6E3A20         
+   764 00000837 303068                  msgFncNo	db "00h"
+   765 0000083A 0D0A                    		db 0Dh, 0Ah
+   766 0000083C 4261736520494F2041-     		db "Base IO Address: "
+   766 00000845 6464726573733A20   
+   767 0000084D 303030306820204952-     msgBaseAddr	db "0000h  IRQ: "
+   767 00000856 513A20             
+   768 00000859 3030                    msgIRQ		dw 3030h
+   769 0000085B 0D0A00                  		db 0Dh, 0Ah, 0
+   770                                  
+   771                                  EOF: 
+   772                                  
+   773                                  ; BSS
+   774                                  
+   775                                  bss_start:
+   776                                  
+   777                                  ABSOLUTE bss_start
+   778                                  
+   779 0000085E <res 00000002>          alignb 4
+   780                                  
+   781 00000860 <res 00000001>          stmo:		resb 1 ; stereo or mono (1=stereo) 
+   782 00000861 <res 00000001>          bps:		resb 1 ; bits per sample (8,16)
+   783 00000862 <res 00000002>          sample_rate:	resw 1 ; Sample Frequency (Hz)
+   784                                  
+   785 00000864 <res 00000001>          cbs_busy:	resb 1 
+   786 00000865 <res 00000001>          half_buff:	resb 1
+   787 00000866 <res 00000001>          flags:		resb 1
+   788 00000867 <res 00000001>          srb:		resb 1	
+   789                                  
+   790 00000868 <res 0000001C>          smpRBuff:	resw 14 
+   791                                  
+   792                                  wav_file_name:
+   793 00000884 <res 00000050>          		resb 80 ; wave file, path name (<= 80 bytes)
+   794                                  
+   795                                  ; 10/06/2017
+   796 000008D4 <res 00000002>          resw 1
+   797 000008D6 <res 00000004>          dev_vendor:	resd 1
+   798 000008DA <res 00000004>          bus_dev_fn:	resd 1
+   799 000008DE <res 00000002>          ac97_IO_base:	resw 1
+   800 000008E0 <res 00000001>          ac97_int_ln_reg: resb 1
+   801                                  ; 24/06/2017
+   802 000008E1 <res 00000001>          volume_level:	resb 1
+   803                                  
+   804                                  bss_end:
+   805 000008E2 <res 0000071E>          alignb 4096
+   806 00001000 <res 00008000>          audio_buffer:	resb BUFFERSIZE ; DMA Buffer Size / 2  (32768)
