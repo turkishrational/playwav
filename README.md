@@ -44,4 +44,4 @@ PLAYWAV2.COM, PLAYWAV3.COM, PLAYWAV4.COM and PLAYWAV5.COM can be tested with 256
 Command: PLAYWAV2 FILE.WAV (PLAYWAV2 C:\WAV\FILENAME.WAV)
 
 ***
-Youtube demo: https://youtu.be/m6dSEDTjoaQ
+Youtube demo: https://youtu.be/m6dSEDTjoaQ www.youtube.com/@erdogantan
