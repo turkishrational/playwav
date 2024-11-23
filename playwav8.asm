@@ -6503,6 +6503,10 @@ msgVRAno	db "NO ", 0Dh, 0Ah
 ; --------------------------------------------------------
 ; 14/11/2024 (Ref: player.asm, Matan Alfasi, 2017)
 
+; 23/11/2024 (overwrite splashscreen, a method to solve 64KB limit problem)
+; wave volume leds address array
+wleds_addr:	; 80*16 bytes
+
 SplashScreen:
 		db  221, 219, 222, "                                                                          ", 221, 219, 222
 		db  221, 219, 222, "                                                                          ", 221, 219, 222
@@ -6571,7 +6575,7 @@ align 2
 
 ; 22/11/2024
 ; wave volume leds address array
-wleds_addr:	rw 80*8 ; rb 2*80*8
+;wleds_addr:	rw 80*8 ; rb 2*80*8
 
 ; 14/11/2024
 ; 17/02/2017
