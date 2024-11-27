@@ -5,7 +5,7 @@
 ;
 ; 14/11/2024
 ;
-; [ Last Modification: 23/11/2024 ]
+; [ Last Modification: 25/11/2024 ]
 ;
 ; Modified from PLAYWAV7.COM .wav player program by Erdogan Tan, 13/11/2024
 ;
@@ -582,11 +582,6 @@ pmsg_usage:
 	; 30/05/2024
 init_err:
 	sys_msg msg_init_err, 0Fh
-	jmp	short Exit
-
-	; 30/05/2024
-error_exit:
-	sys_msg msg_error, 0Eh
 	jmp	short Exit
 
 	; --------------------------------------------
@@ -1296,7 +1291,12 @@ padfill:
 	;add	di, ax       	
 	; 07/11/2023
 	;add	di, [fbs_off]
-        xor	ax, ax
+ 	; 25/11/2024
+	xor	ax, ax
+	cmp	byte [WAVE_BitsPerSample], 16
+	je	short padfill@
+	mov	al, 80h
+padfill@:
 	rep	stosb
 	;mov	[fbs_off], di
 	;pop	di
@@ -6128,7 +6128,6 @@ tol_fill_c:
 
 	jmp	short tol_retn
 
-
 	; 23/11/2024
 turn_on_leds_mono_16bit:
 	push	es
@@ -6402,12 +6401,15 @@ p_msg_x:
 ; DATA
 
 ; 30/05/2024
-reset:	db	0
+;reset:	db	0
 
 Credits:
 	db	'Tiny WAV Player for Retro DOS by Erdogan Tan. '
 	db	'November 2024.',10,13,0
-	db	'23/11/2024', 10,13,0
+	db	'25/11/2024', 10,13
+; 15/11/2024
+reset:
+	db	0
 
 msgAudioCardInfo:
 	db 	'for Intel AC97 (ICH) Audio Controller.', 10,13,0
