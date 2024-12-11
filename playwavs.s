@@ -5,7 +5,7 @@
 ;
 ; 25/11/2023
 ;
-; [ Last Modification: 06/06/2024 ]
+; [ Last Modification: 08/12/2024 ]
 ;
 ; Modified from PLAYWAV5.PRG .wav player program by Erdogan Tan, 18/08/2020
 ;
@@ -1346,9 +1346,12 @@ lff32_3:
 lff44_3:
 lff22_3:
 lff11_3:
+	; 08/12/2024 (BugFix)
 	; 01/06/2024 (BugFix)
 	mov	ecx, [buffersize] ; 16 bit (48 kHZ, stereo) sample size
 	;shl	ecx, 1	; byte count ; Bug !
+	; 08/12/2024
+	add	ecx, audio_buffer
 	sub	ecx, edi
 	jna	short lff8m_4
 	;inc	ecx
@@ -1358,7 +1361,8 @@ lff11_3:
 lff8m_4:
 	; 01/06/2024 (BugFix)
 	; cf=1 ; Bug !
-	clc
+	; 08/12/2024
+	;clc
 	retn
 
 lff8_eof:
@@ -4173,14 +4177,16 @@ FileHandle:
 
 Credits:
 	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
-	;;db	'August 2020.',10,13,0
-	;db	'November 2023.',10,13,0
-	db	'June 2024.', 10,13,0
+	;;;db	'August 2020.',10,13,0
+	;;db	'November 2023.',10,13,0
+	;db	'June 2024.', 10,13,0
+	db	'December 2024.', 10,13,0
 	db	'17/06/2017', 10,13,0
 	db	'18/08/2020', 10,13,0
 	db	'27/11/2023', 10,13,0
 	db	'01/06/2024', 10,13,0
 	db	'06/06/2024', 10,13,0
+	db	'08/12/2024', 10,13,0
 
 msgAudioCardInfo:
 	db 	'for Intel AC97 (ICH) Audio Controller.', 10,13,0

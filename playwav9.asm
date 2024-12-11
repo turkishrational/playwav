@@ -5,7 +5,7 @@
 ;
 ; 24/11/2024
 ;
-; [ Last Modification: 27/11/2024 ]
+; [ Last Modification: 07/12/2024 ]
 ;
 ; Modified from PLAYWAV8.COM .wav player program by Erdogan Tan, 23/11/2024
 ;
@@ -2396,8 +2396,8 @@ p_msg_x:
 
 Credits:
 	db	'Tiny WAV Player for Retro DOS by Erdogan Tan. '
-	db	'November 2024.',10,13,0
-	db	'27/11/2024', 10,13,0
+	db	'December 2024.',10,13,0
+	db	'07/12/2024', 10,13,0
 
 msgAudioCardInfo:
 	db 	'for Sound Blaster 16 audio device.', 10,13,0
@@ -2419,7 +2419,7 @@ msg_error:	; 30/05/2024
 msg_init_err:
 	db	0Dh, 0Ah
 	db	"Sound Blaster 16 hardware initialization error !"
-	db	0Dh, 0Ah, "$"
+	db	0Dh, 0Ah, 0 ; 07/12/2024
 
 ; 19/11/2024
 ; 03/06/2017

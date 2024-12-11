@@ -1,20 +1,21 @@
 ; ****************************************************************************
-; playwav6.s (for TRDOS 386)
+; playwav8.s (for TRDOS 386)
 ; ----------------------------------------------------------------------------
-; PLAYWAV6.PRG ! AC'97 (ICH) .WAV PLAYER program by Erdogan TAN
+; PLAYWAV8.PRG ! AC'97 (ICH) .WAV PLAYER program by Erdogan TAN
 ;
 ; 25/11/2023
 ;
-; [ Last Modification: 04/06/2024 ]
+; [ Last Modification: 08/12/2024 ]
 ;
 ; Modified from PLAYWAV5.PRG .wav player program by Erdogan Tan, 18/08/2020
 ;
 ; Assembler: NASM version 2.15
-;	     nasm playwav6.s -l playwav6.txt -o PLAYWAV6.PRG	
+;	     nasm playwav8.s -l playwav8.txt -o PLAYWAV8.PRG	
 ; ----------------------------------------------------------------------------
 ; Derived from '.wav file player for DOS' Jeff Leyda, Sep 02, 2002
 
-; previous version: playwav3.s (17/06/2017)
+; playwav6.s (04/06/2024)
+; playwav3.s (17/06/2017)
 
 ; 04/06/2024 (non-VRA simuation)
 ; Interpolated sampling rate version (48 kHz - VRA disabled) - playwav8.s-
@@ -1171,11 +1172,14 @@ _w_ac97imsg_:
 write_VRA_info:
 	; 25/11/2023
 	sys	_msg, msgVRAheader, 255, 07h
+; 08/12/2024
+%if 0
 	cmp	byte [VRA], 0
 	jna	short _w_VRAi_no
 _w_VRAi_yes:
 	sys	_msg, msgVRAyes, 255, 07h
 	retn
+%endif
 _w_VRAi_no:
 	sys	_msg, msgVRAno, 255, 07h
 	retn
@@ -1317,19 +1321,23 @@ lff32_3:
 lff44_3:
 lff22_3:
 lff11_3:
+	; 08/12/2024 (BugFix)
 	; 01/06/2024 (BugFix)
 	mov	ecx, [buffersize] ; 16 bit (48 kHZ, stereo) sample size
 	;shl	ecx, 1	; byte count ; Bug !
+	; 08/12/2024
+	add	ecx, audio_buffer
 	sub	ecx, edi
 	jna	short lff8m_4
 	;inc	ecx
 	shr	ecx, 2
-	xor	eax, eax ; fill (remain part of) buffer with zeros	
+	xor	eax, eax ; fill (remain part of) buffer with zeros
 	rep	stosd
 lff8m_4:
 	; 01/06/2024 (BugFix)
 	; cf=1 ; Bug !
-	clc
+	; 08/12/2024
+	;clc
 	retn
 
 lff8_eof:
@@ -4144,20 +4152,22 @@ FileHandle:
 
 Credits:
 	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
-	;;db	'August 2020.',10,13,0
-	;db	'November 2023.',10,13,0
-	db	'June 2024.', 10,13,0
+	;;;db	'August 2020.',10,13,0
+	;;db	'November 2023.',10,13,0
+	;db	'June 2024.', 10,13,0
+	db	'December 2024', 10,13,0
 	db	'17/06/2017', 10,13,0
 	db	'18/08/2020', 10,13,0
 	db	'27/11/2023', 10,13,0
 	db	'01/06/2024', 10,13,0
 	db	'04/06/2024', 10,13,0
+	db	'08/12/2024', 10,13,0
 
 msgAudioCardInfo:
 	db 	'for Intel AC97 (ICH) Audio Controller.', 10,13,0
 
 msg_usage:
-	db	'usage: playwav6 filename.wav',10,13,0
+	db	'usage: playwav8 filename.wav',10,13,0
 
 noDevMsg:
 	db	'Error: Unable to find AC97 audio device!'
@@ -4211,7 +4221,8 @@ msgIRQ		dw 3030h
 ; 25/11/2023
 msgVRAheader:	db "VRA support: "
 		db 0	
-msgVRAyes:	db "YES", 0Dh, 0Ah, 0
+; 08/12/2024
+;msgVRAyes:	db "YES", 0Dh, 0Ah, 0
 msgVRAno:	db "NO ", 0Dh, 0Ah
 		db "(Interpolated sample rate playing method)"
 		db 0Dh, 0Ah, 0	

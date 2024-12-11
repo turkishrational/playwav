@@ -5,7 +5,7 @@
 ;
 ; 13/11/2024
 ;
-; [ Last Modification: 13/11/2024 ]
+; [ Last Modification: 07/12/2024 ]
 ;
 ; Modified from PLAYWAV6.COM .wav player program by Erdogan Tan, 30/05/2024
 ;               (Assembler: NASM 2.15)
@@ -4995,8 +4995,8 @@ reset:	db	0
 
 Credits:
 	db	'Tiny WAV Player for Retro DOS by Erdogan Tan. '
-	db	'November 2024.',10,13,0
-	db	'13/11/2024', 10,13,0
+	db	'December 2024.',10,13,0
+	db	'07/12/2024', 10,13,0
 
 msgAudioCardInfo:
 	db 	'for Intel AC97 (ICH) Audio Controller.', 10,13,0
@@ -5018,7 +5018,7 @@ msg_error:	; 30/05/2024
 msg_init_err:
 	db	CR, LF
 	db	"AC97 Controller/Codec initialization error !"
-	db	CR, LF, "$"
+	db	CR, LF, 0 ; 07/12/2024
 
 ; 25/11/2023
 msg_no_vra:

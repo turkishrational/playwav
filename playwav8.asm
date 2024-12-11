@@ -5,7 +5,7 @@
 ;
 ; 14/11/2024
 ;
-; [ Last Modification: 25/11/2024 ]
+; [ Last Modification: 09/12/2024 ]
 ;
 ; Modified from PLAYWAV7.COM .wav player program by Erdogan Tan, 13/11/2024
 ;
@@ -242,31 +242,6 @@ wleds_sa_2:
 	jnz	short wleds_sa_1
 	;;;
 
-	;;;
-	; 23/11/2024
-	cmp	byte [WAVE_NumChannels], 1
-	ja	short stolp_s
-stolp_m:
-	cmp	byte [WAVE_BitsPerSample], 8
-	ja	short stolp_m16
-stolp_m8:
-	mov	word [turn_on_leds], turn_on_leds_mono_8bit
-	jmp	short stolp_ok
-stolp_m16:
-	mov	word [turn_on_leds], turn_on_leds_mono_16bit
-	jmp	short stolp_ok
-stolp_s:
-	cmp	byte [WAVE_BitsPerSample], 8
-	ja	short stolp_s16
-stolp_s8:
-	mov	word [turn_on_leds], turn_on_leds_stereo_8bit
-	jmp	short stolp_ok
-stolp_s16:
-	mov	word [turn_on_leds], turn_on_leds_stereo_16bit
-	jmp	short stolp_ok
-stolp_ok:
-	;;;
-
 	;;; wait for 3 seconds
 	mov	cx, 002Dh
 	mov	dx, 0C6C0h
@@ -283,7 +258,9 @@ Player_Template:
 	mov	ax, 1300h
 	mov	bx, 000Fh
 	mov	cx, 1999
-	mov	dx, 0
+	; 09/12/2024
+	; dx = 0
+	;mov	dx, 0
     
 	mov	bp, Template
 	int	10h
@@ -708,17 +685,29 @@ RePlayWav:
 	; 19/11/2024
 	mov	byte [wleds], 1
 
+	;;;
+	; 09/12/2024
+	mov	ax, 10548 ; (48000*10/182)*4
+	cmp	byte [VRA], 0
+	jna	short _3 ; 48kHZ (interpolation)
+	;
 	mov	ax, [WAVE_SampleRate]
 	mov	cx, 10
 	mul	cx
 	mov	cl, 182
 	div	cx
 	; ax = samples per 1/18.2 second
-	mov	cl, byte [WAVE_BlockAlign] 
-	mul	cx
+	;mov	cl, byte [WAVE_BlockAlign] 
+	; 09/12/2024
+	;mov	cl, 4 ; 16 bit, stereo
+	;mul	cx
+	shl	ax, 2 ; * 4
+_3:
 	mov	[wleds_dif], ax ; buffer read differential (distance)
 				; for wave volume leds update
 				; (byte stream per 1/18.2 second)
+	;;;
+
 tuneLoop:
 	; 30/05/2024
 	; 18/11/2023 (ich_wav4.asm)
@@ -5997,16 +5986,6 @@ move_file_pointer:
 
 ; --------------------------------------------------------
 
-	; 19/11/2024
-UpdateWaveLeds:
-	; 23/11/2024
-	call	reset_wave_leds
-	;call	word [turn_on_leds]
-	;retn
-	jmp	word [turn_on_leds]
-
-; --------------------------------------------------------
-
 	; 23/11/2024
 	; 19/11/2024
 clear_window:
@@ -6030,8 +6009,20 @@ clear_window_@:
 
 ; --------------------------------------------------------
 
+	; 09/12/2024
 	; 19/11/2024
-turn_on_leds_stereo_16bit:
+UpdateWaveLeds:
+	; 23/11/2024
+	call	reset_wave_leds
+	; 09/12/2024
+	;jmp	short turn_on_leds
+
+; --------------------------------------------------------
+
+	; 09/12/2024
+turn_on_leds:
+	; 19/11/2024
+;turn_on_leds_stereo_16bit:
 	push	es
 	push	ds
 
@@ -6107,12 +6098,15 @@ tol_fill_c:
 	;;;
 	; 23/11/2024
 	add	ax, dx
-	shr	ax, 8
-	;shr	ax, 9
-	add	al, 80h
-	shr	ax, 5
+	; 09/12/2024
+	;shr	ax, 8
+	;;shr	ax, 9
+	;add	al, 80h
+	;shr	ax, 5
+	add	ah, 80h
+	shr	ax, 13
 	;;;
-	;shr	ax, 6
+	;;shr	ax, 6
 
 	push	bx
 	shl	ax, 1
@@ -6127,230 +6121,6 @@ tol_fill_c:
 	loop	tol_fill_c
 
 	jmp	short tol_retn
-
-	; 23/11/2024
-turn_on_leds_mono_16bit:
-	push	es
-	push	ds
-
-	cmp	byte [tLO],'2'
-	jne	short tol2_buffer_1
-
-tol2_buffer_2:
-	mov	si, [WAV_BUFFER2]
-	jmp	short tol2_@
-
-tol2_buffer_1:
-	cmp	byte [tLO],'1'
-	jne	short tol_clc_retn
-
-	mov	si, [WAV_BUFFER1]
-tol2_@:
-	; calculate differential
-	cmp	[pbuf_s], si
-	jne	short tol2_ns_buf
-	mov	bx, [wleds_dif]
-	mov	si, [pbuf_o]
-	mov	cx, [buffersize] ; word
-	shl	cx, 1 ; byte
-	sub	cx, bx ; sub cx, [wleds_dif]
-	add	si, bx
-	jc	short tol2_o_@
-	cmp	si, cx
-	jna	short tol2_s_buf
-tol2_o_@:
-	mov	si, cx
-	jmp	short tol2_s_buf
-
-;tol2_clc_retn:
-;	clc
-;tol2_retn:
-;	pop	ds
-;	pop	es
-;	retn
-
-tol2_ns_buf:
-	mov	[pbuf_s], si
-	xor	si, si	; 0
-tol2_s_buf:
-	mov	[pbuf_o], si
-
-tol2_buf_@:
-	mov	ds, [pbuf_s]
-	mov	di, 0B800h
-	mov	es, di
-	
-	mov	cx, 80
-
-	mov	bx, wleds_addr
-
-tol2_fill_c:
-	lodsw
-	shr	ax, 8
-	add	al, 80h
-	shr	ax, 5
-	push	bx
-	shl	ax, 1
-	add	bx, ax
-	mov	di, [cs:bx]
-	mov	ah, [cs:ccolor]
-	mov	al, 254
-	mov	[es:di], ax
-	pop	bx
-	add	bx, 16
-	loop	tol2_fill_c
-
-	jmp	tol_retn
-
-turn_on_leds_stereo_8bit:
-	push	es
-	push	ds
-
-	cmp	byte [tLO],'2'
-	jne	short tol3_buffer_1
-
-tol3_buffer_2:
-	mov	si, [WAV_BUFFER2]
-	jmp	short tol3_@
-
-tol3_buffer_1:
-	cmp	byte [tLO],'1'
-	jne	short tol3_clc_retn
-
-	mov	si, [WAV_BUFFER1]
-tol3_@:
-	; calculate differential
-	cmp	[pbuf_s], si
-	jne	short tol3_ns_buf
-	mov	bx, [wleds_dif]
-	mov	si, [pbuf_o]
-	mov	cx, [buffersize] ; word
-	shl	cx, 1 ; byte
-	sub	cx, bx ; sub cx, [wleds_dif]
-	add	si, bx
-	jc	short tol3_o_@
-	cmp	si, cx
-	jna	short tol3_s_buf
-tol3_o_@:
-	mov	si, cx
-	jmp	short tol3_s_buf
-
-tol3_clc_retn:
-	clc
-tol3_retn:
-	pop	ds
-	pop	es
-	retn
-
-tol3_ns_buf:
-	mov	[pbuf_s], si
-	xor	si, si	; 0
-tol3_s_buf:
-	mov	[pbuf_o], si
-
-tol3_buf_@:
-	mov	ds, [pbuf_s]
-	mov	di, 0B800h
-	mov	es, di
-	
-	mov	cx, 80
-
-	mov	bx, wleds_addr
-
-tol3_fill_c:
-	lodsw	; left (al), right (ah)
-	add	al, ah
-	add	al, 80h
-	xor	ah, ah
-	;shr	ax, 6
-	shr	ax, 5
-	push	bx
-	shl	ax, 1
-	add	bx, ax
-	mov	di, [cs:bx]
-	mov	ah, [cs:ccolor]
-	mov	al, 254
-	mov	[es:di], ax
-	pop	bx
-	add	bx, 16
-	loop	tol3_fill_c
-
-	jmp	short tol3_retn
-
-
-	; 23/11/2024
-turn_on_leds_mono_8bit:
-	push	es
-	push	ds
-
-	cmp	byte [tLO],'2'
-	jne	short tol4_buffer_1
-
-tol4_buffer_2:
-	mov	si, [WAV_BUFFER2]
-	jmp	short tol4_@
-
-tol4_buffer_1:
-	cmp	byte [tLO],'1'
-	jne	short tol3_clc_retn
-
-	mov	si, [WAV_BUFFER1]
-tol4_@:
-	; calculate differential
-	cmp	[pbuf_s], si
-	jne	short tol4_ns_buf
-	mov	bx, [wleds_dif]
-	mov	si, [pbuf_o]
-	mov	cx, [buffersize] ; word
-	shl	cx, 1 ; byte
-	sub	cx, bx ; sub cx, [wleds_dif]
-	add	si, bx
-	jc	short tol4_o_@
-	cmp	si, cx
-	jna	short tol4_s_buf
-tol4_o_@:
-	mov	si, cx
-	jmp	short tol4_s_buf
-
-;tol4_clc_retn:
-;	clc
-;tol4_retn:
-;	pop	ds
-;	pop	es
-;	retn
-
-tol4_ns_buf:
-	mov	[pbuf_s], si
-	xor	si, si	; 0
-tol4_s_buf:
-	mov	[pbuf_o], si
-
-tol4_buf_@:
-	mov	ds, [pbuf_s]
-	mov	di, 0B800h
-	mov	es, di
-	
-	mov	cx, 80
-
-	mov	bx, wleds_addr
-
-tol4_fill_c:
-	lodsb
-	xor	ah, ah
-	add	al, 80h
-	shr	ax, 5
-	push	bx
-	shl	ax, 1
-	add	bx, ax
-	mov	di, [cs:bx]
-	mov	ah, [cs:ccolor]
-	mov	al, 254
-	mov	[es:di], ax
-	pop	bx
-	add	bx, 16
-	loop	tol4_fill_c
-
-	jmp	tol3_retn
 
 ; --------------------------------------------------------
 
@@ -6405,8 +6175,8 @@ p_msg_x:
 
 Credits:
 	db	'Tiny WAV Player for Retro DOS by Erdogan Tan. '
-	db	'November 2024.',10,13,0
-	db	'25/11/2024', 10,13
+	db	'December 2024.',10,13,0
+	db	'09/12/2024', 10,13
 ; 15/11/2024
 reset:
 	db	0
@@ -6431,7 +6201,7 @@ msg_error:	; 30/05/2024
 msg_init_err:
 	db	CR, LF
 	db	"AC97 Controller/Codec initialization error !"
-	db	CR, LF, "$"
+	db	CR, LF, 0 ; 07/12/2024
 
 ; 25/11/2023
 msg_no_vra:
@@ -6657,7 +6427,12 @@ ac97_int_ln_reg: rb 1
 wav_file_name:
 		rb 80 ; wave file, path name (<= 80 bytes)
 
-		rw 1	
+		rw 1
+
+; 12/11/2016 - Erdogan Tan
+
+bus_dev_fn:	rd 1
+dev_vendor:	rd 1	
 
 ; 17/02/2017
 ; NAMBAR:  Native Audio Mixer Base Address Register
@@ -6673,13 +6448,9 @@ WAV_BUFFER1:	rw 1			; segment of our WAV storage
 ; 64k buffers for wav file storage
 WAV_BUFFER2:	rw 1			; segment of 2nd wav buffer
 
+; 09/12/2024
 ; 23/11/2024
-turn_on_leds:	rw 1	; turn_on_leds procedure pointer (m8,m16,s8,s16)
-
-; 12/11/2016 - Erdogan Tan
-
-bus_dev_fn:	rd 1
-dev_vendor:	rd 1
+;turn_on_leds:	rd 1	; turn_on_leds procedure pointer (m8,m16,s8,s16)
 
 ; 15/11/2024
 ; 06/11/2023
