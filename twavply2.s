@@ -5,7 +5,7 @@
 ;
 ; 09/12/2023
 ;
-; [ Last Modification: 09/12/2023 ]
+; [ Last Modification: 08/12/2024 ]
 ;
 ; Modified from: twavplay.s (VIA VT8237R WAV PLAYER & VGA DEMO) program
 ;	         by Erdogan Tan (24/08/2020) 
@@ -1524,15 +1524,21 @@ lff32_3:
 lff44_3:
 lff22_3:
 lff11_3:
+	; 08/12/2024 (BugFix)
 	mov	ecx, [buffersize] ; 16 bit (48 kHZ, stereo) sample size
-	shl	ecx, 1	; byte count
+	;shl	ecx, 1	; byte count ; Bug !
+	; 08/12/2024
+	add	ecx, audio_buffer
 	sub	ecx, edi
 	jna	short lff8m_4
 	;inc	ecx
 	shr	ecx, 2
-	xor	eax, eax ; fill (remain part of) buffer with zeros	
+	xor	eax, eax ; fill (remain part of) buffer with zeros
 	rep	stosd
 lff8m_4:
+	; 08/12/2024 (BugFix)
+	; cf=1 ; Bug !
+	;clc
 	retn
 
 lff8_eof:
@@ -4809,12 +4815,14 @@ msg_usage:
 	; 09/12/2023
 	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan',10,13
 	db 	'for Intel AC97 (ICH) Audio Controller.',10,13
-	db	'December 2023.',10,13
+	;db	'December 2023.',10,13
+	db	'December 2024.',10,13
 credits_zero:
 	db	10,13
 	db	'usage: twavplay filename.wav',10,13,0
 	db	'24/08/2020',10,13,0
 	db	'09/12/2023',10,13,0
+	db	'08/12/2024',10,13,0
 
 noDevMsg:
 	; 09/12/2023
