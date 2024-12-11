@@ -5,7 +5,7 @@
 ;
 ; 29/11/2024
 ;
-; [ Last Modification: 29/11/2024 ]
+; [ Last Modification: 07/12/2024 ]
 ;
 ; Modified from PLAYWAV9.COM .wav player program by Erdogan Tan, 27/11/2024
 ;
@@ -405,17 +405,11 @@ stolp_ok:
 PlayNow:
 	; 29/11/2024
 	cmp	byte [IsInSplash], 0
-	ja	short PlayNow@
+	;ja	short PlayNow@
+	; 02/12/2024
+	jna	short PlayNow@
 
-		; reset file loading and EOF parameters
-	;mov	word [count], 0
-	mov	word [LoadedDataBytes], 0
-	mov	word [LoadedDataBytes+2], 0
-	mov	byte [flags], 0
-	mov	byte [stopped], 0
-	jmp	short PlayNow@@
-
-PlayNow@:
+;PlayNow@:
 	; 24/11/2024
 	mov	al, 5	; 15 = max, 0 = min
 	; 27/11/2024
@@ -424,11 +418,23 @@ PlayNow@:
 	call	SetMasterVolume
 
 	; 29/11/2024
-	cmp	byte [IsInSplash], 0
-	ja	short _3
+	;cmp	byte [IsInSplash], 0
+	;ja	short _3
+	;
+	;call	UpdateVolume
+	;
+	; 02/12/2024 
+	jmp	short _3
 
-	call	UpdateVolume
-	;;;
+PlayNow@:
+	; reset file loading and EOF parameters
+	;mov	word [count], 0
+	mov	word [LoadedDataBytes], 0
+	mov	word [LoadedDataBytes+2], 0
+	mov	byte [flags], 0
+	mov	byte [stopped], 0
+	;jmp	short PlayNow@@
+
 PlayNow@@:
 	;;;
 	;
@@ -446,7 +452,6 @@ _2:
 
 _3:
 	call    PlayWav
-
 
 	; 29/11/2024
 	; 28/11/2024 (ac97play.asm)
@@ -2635,8 +2640,8 @@ p_msg_x:
 
 Credits:
 	db	'Tiny WAV Player for Retro DOS by Erdogan Tan. '
-	db	'November 2024.',10,13,0
-	db	'29/11/2024', 10,13,0
+	db	'December 2024.',10,13,0
+	db	'07/12/2024', 10,13,0
 
 msgAudioCardInfo:
 	db 	'for Sound Blaster 16 audio device.', 10,13,0
@@ -2658,7 +2663,7 @@ msg_error:	; 30/05/2024
 msg_init_err:
 	db	0Dh, 0Ah
 	db	"Sound Blaster 16 hardware initialization error !"
-	db	0Dh, 0Ah, "$"
+	db	0Dh, 0Ah, 0
 
 ; 19/11/2024
 ; 03/06/2017
