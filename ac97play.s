@@ -5,7 +5,7 @@
 ;
 ; 30/11/2024
 ;
-; [ Last Modification: 09/12/2024 ]
+; [ Last Modification: 13/12/2024 ]
 ;
 ; Modified from AC97PLAY.COM .wav player program by Erdogan Tan, 29/11/2024
 ;
@@ -727,10 +727,13 @@ PlayNow:
 ;PlayNow@:
 	;;;
 	; 14/11/2024
-	mov	al, 3	; 0 = max, 31 = min
+	;mov	al, 3	; 0 = max, 31 = min
+	; 13/12/2024
+	mov	al, [volume]
+	call	SetPCMOutVolume@
 	; 15/11/2024
-	;call	SetMasterVolume
-	call	SetPCMOutVolume
+	;;call	SetMasterVolume
+	;call	SetPCMOutVolume
 
 	; 28/11/2024
 	;cmp	byte [IsInSplash], 0
@@ -1461,7 +1464,7 @@ lff_0:
 	mov	ebx, [filehandle]
 	;mov	ecx, [loadsize]
 	; 02/12/2024
-	mov	edx, [loadsize] 
+	mov	edx, [loadsize]
 	;xor	di, di ; 0
 
 	;mov	cl, [fbs_shift]
@@ -1939,8 +1942,8 @@ load_8khz_mono_8_bit:
 lff8m_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -1955,11 +1958,10 @@ lff8m_0:
 lff8m_6:
 	; 01/12/2024
 	mov	[count], eax
-
 	;mov	edi, audio_buffer
 	; 29/05/2024
-	;mov	edi, [audio_buffer]
-	and	eax, eax
+	mov	edi, [audio_buffer]
+	;and	eax, eax
 	jz	lff8_eof
 
 	mov	ecx, eax		; byte count
@@ -2046,7 +2048,8 @@ lff11_3:
 	mov	ecx, [buffersize] ; buffer size in words
 	; 08/12/2024
 	shl	ecx, 1 ; buffer size in bytes
-	add	ecx, ebp ; + start address of the buffer
+	; 13/12/2024
+	add	ecx, [audio_buffer] ; + start address of the buffer
 	sub	ecx, edi
 	jna	short lff8m_4
 	;inc	ecx
@@ -2106,8 +2109,8 @@ load_8khz_stereo_8_bit:
 lff8s_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -2242,8 +2245,8 @@ load_8khz_mono_16_bit:
 lff8m2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -2338,8 +2341,8 @@ load_8khz_stereo_16_bit:
 lff8s2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -2468,8 +2471,8 @@ load_16khz_mono_8_bit:
 lff16m_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -2551,8 +2554,8 @@ load_16khz_stereo_8_bit:
 lff16s_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -2645,8 +2648,8 @@ load_16khz_mono_16_bit:
 lff16m2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -2722,8 +2725,8 @@ load_16khz_stereo_16_bit:
 lff16s2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -2814,8 +2817,8 @@ load_24khz_mono_8_bit:
 lff24m_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -2883,8 +2886,8 @@ load_24khz_stereo_8_bit:
 lff24s_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -2961,8 +2964,8 @@ load_24khz_mono_16_bit:
 lff24m2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -3031,8 +3034,8 @@ load_24khz_stereo_16_bit:
 lff24s2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -3109,8 +3112,8 @@ load_32khz_mono_8_bit:
 lff32m_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -3189,8 +3192,8 @@ load_32khz_stereo_8_bit:
 lff32s_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -3282,8 +3285,8 @@ load_32khz_mono_16_bit:
 lff32m2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -3362,8 +3365,8 @@ load_32khz_stereo_16_bit:
 lff32s2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -3450,8 +3453,8 @@ load_22khz_mono_8_bit:
 lff22m_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -3531,8 +3534,8 @@ load_22khz_stereo_8_bit:
 lff22s_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -3606,8 +3609,8 @@ load_22khz_mono_16_bit:
 lff22m2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -3687,8 +3690,8 @@ load_22khz_stereo_16_bit:
 lff22s2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -3781,8 +3784,8 @@ load_11khz_mono_8_bit:
 lff11m_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -3847,11 +3850,6 @@ lff11m_7:
 lff11s_7:
 	jmp	lff11_5  ; error
 
-lff11m_3:
-lff11s_3:
-	jmp	lff11_3	; padfill
-		; (put zeros in the remain words of the buffer)
-
 load_11khz_stereo_8_bit:
 	; 18/11/2023
         test    byte [flags], ENDOFFILE	; have we already read the
@@ -3860,11 +3858,16 @@ load_11khz_stereo_8_bit:
 	stc
 	retn
 
+lff11m_3:
+lff11s_3:
+	jmp	lff11_3	; padfill
+		; (put zeros in the remain words of the buffer)
+
 lff11s_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -3938,8 +3941,8 @@ load_11khz_mono_16_bit:
 lff11m2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -4015,8 +4018,8 @@ load_11khz_stereo_16_bit:
 lff11s2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -4121,8 +4124,8 @@ load_44khz_mono_8_bit:
 lff44m_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -4198,8 +4201,8 @@ load_44khz_stereo_8_bit:
 lff44s_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -4272,8 +4275,8 @@ load_44khz_mono_16_bit:
 lff44m2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -4347,8 +4350,8 @@ load_44khz_stereo_16_bit:
 lff44s2_0:
 	; 01/12/2024
 	; edi = audio buffer address
-	; 08/12/2024
-	mov	ebp, edi
+	; 13/12/2024
+	mov	[audio_buffer], edi
 	mov	esi, temp_buffer ; temporary buffer for wav data
         ;mov	edx, [loadsize]
 
@@ -5622,7 +5625,7 @@ set_rate:
 skip_rate:
 	mov	ax, 0202h
   	mov	dx, [NAMBAR]
-  	add	dx, CODEC_MASTER_VOL_REG	;02h
+  	add	dx, CODEC_MASTER_VOL_REG ;02h
 	;out	dx, ax
 	; 29/05/2024
 	push	ebx
@@ -6370,7 +6373,8 @@ setLastValidIndex:
 
 ; 29/05/2024
 ; 19/05/2024
-volume: db	02h
+volume: ;db	02h
+	db	03h	; 13/12/2024
 
 ; --------------------------------------------------------
 
@@ -6991,7 +6995,7 @@ tol_fill_c:
 Credits:
 	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
 	db	'December 2024.',10,13,0
-	db	'09/12/2024', 10,13
+	db	'13/12/2024', 10,13
 ; 15/11/2024
 reset:
 	db	0
@@ -7161,6 +7165,9 @@ EOF:
 
 ; 30/11/2024 (32bit address and pointers for TRDOS 386)
 align 4
+
+; 13/12/2024
+audio_buffer:	rd 1
 
 ; 09/12/2024
 pbuf_s:		rd 1
