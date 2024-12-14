@@ -5,7 +5,7 @@
 ;
 ; 28/11/2024
 ;
-; [ Last Modification: 09/12/2024 ]
+; [ Last Modification: 14/12/2024 ]
 ;
 ; Modified from PLAYWAV8.COM .wav player program by Erdogan Tan, 25/11/2024
 ;
@@ -1483,6 +1483,7 @@ lff_4:
 ; destroys bx, cx
 ;
 padfill:
+	; 14/12/2024
 	; 17/11/2024
 	;   di = offset (to be filled with ZEROs)
 	;   bp = buffer segment
@@ -1506,10 +1507,7 @@ padfill:
 	;add	di, [fbs_off]
  	; 25/11/2024
 	xor	ax, ax
-	cmp	byte [WAVE_BitsPerSample], 16
-	je	short padfill@
-	mov	al, 80h
-padfill@:
+	; 14/12/2024
 	rep	stosb
 	;mov	[fbs_off], di
 	;pop	di
@@ -6436,7 +6434,7 @@ p_msg_x:
 Credits:
 	db	'Tiny WAV Player for Retro DOS by Erdogan Tan. '
 	db	'December 2024.',10,13,0
-	db	'09/12/2024', 10,13
+	db	'14/12/2024', 10,13
 ; 15/11/2024
 reset:
 	db	0

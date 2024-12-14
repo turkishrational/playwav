@@ -5,7 +5,7 @@
 ;
 ; 30/11/2024
 ;
-; [ Last Modification: 13/12/2024 ]
+; [ Last Modification: 14/12/2024 ]
 ;
 ; Modified from AC97PLAY.COM .wav player program by Erdogan Tan, 29/11/2024
 ;
@@ -293,7 +293,7 @@ a_1:
 	jna	short a_3
 	and	ah, ah
 	jz	short a_2
-	cmp	al, '\'
+	cmp	al, '/'	; 14/12/2024
 	jne	short a_2
 	mov	ah, 0
 a_2:
@@ -718,6 +718,16 @@ vra_err:
 
 	; 01/12/2024 (32bit)
 PlayNow:
+	;;;
+	; 14/11/2024
+	;mov	al, 3	; 0 = max, 31 = min
+	; 14/12/2024
+	mov	al, [volume]
+	call	SetPCMOutVolume@
+	; 15/11/2024
+	;;call	SetMasterVolume
+	;call	SetPCMOutVolume
+
 	; 29/11/2024
 	cmp	byte [IsInSplash], 0
 	;ja	short PlayNow@
@@ -725,16 +735,6 @@ PlayNow:
 	jna	short PlayNow@
 
 ;PlayNow@:
-	;;;
-	; 14/11/2024
-	;mov	al, 3	; 0 = max, 31 = min
-	; 13/12/2024
-	mov	al, [volume]
-	call	SetPCMOutVolume@
-	; 15/11/2024
-	;;call	SetMasterVolume
-	;call	SetPCMOutVolume
-
 	; 28/11/2024
 	;cmp	byte [IsInSplash], 0
 	;ja	short _3
@@ -1441,6 +1441,7 @@ gwavp_retn:
 
 ; /////
 
+	; 14/12/2024
 	; 01/12/2024
 	; 30/05/2024 (ich_wav4.asm, 19/05/2024)
 loadFromFile:
@@ -1459,12 +1460,12 @@ lff_0:
 	; 01/12/2024 (TRDOS 386)
 	; edi = audio buffer address
 
+	; 14/12/2024
 	; 01/12/2024
 	; 17/11/2024
-	mov	ebx, [filehandle]
-	;mov	ecx, [loadsize]
+	;mov	ebx, [filehandle]
 	; 02/12/2024
-	mov	edx, [loadsize]
+	;mov	edx, [loadsize]
 	;xor	di, di ; 0
 
 	;mov	cl, [fbs_shift]
@@ -1474,6 +1475,7 @@ lff_0:
 	cmp	byte [fbs_shift], 0
 	jna	short lff_1 ; stereo, 16 bit
 
+lff_2:
 	;mov	di, BUFFERSIZE - 1 ; 65535
 
 	;; fbs_shift =
@@ -1499,7 +1501,10 @@ lff_0:
 	; 01/12/2024
 	;mov	ah, 3Fh
 	;int	21h
-	sys 	_read, [filehandle], esi ; edx = read count
+	; 14/12/2024
+	;sys 	_read, [filehandle], esi ; edx = read count
+	; 14/12/2024
+	sys 	_read, [filehandle], esi, [loadsize]
 
 	;mov	bx, cs
 	;mov	ds, bx
@@ -1519,9 +1524,14 @@ lff_0:
 
 	; 01/12/2024
 	and	eax, eax
-	jz	short lff_3
+	;jz	short lff_3
+	; 14/12/2024
+	jz	lff_10
 
 	mov	bl, [fbs_shift]
+
+	; 14/12/2024
+	mov	edx, edi ; audio buffer start address
 
 	;push	es
 	;;mov	di, dx ; 0 ; [fbs_off]
@@ -1575,9 +1585,10 @@ lff_9:
 	;jnb	short endLFF
 
 	;mov	cx, BUFFERSIZE - 1 ; 65535
-	; 08/12/2024
-	mov	eax, [count] ; read count (result)
-	mov	ecx, edx ; read count (requested)
+	; 14/12/2024
+	mov	eax, edi
+	mov	ecx, [buffersize] 
+	add	ecx, edx ; + buffer start address
 	; 17/11/2024
 	; ax = di
 	cmp	eax, ecx
@@ -1609,8 +1620,10 @@ lff_1:
        	;mov	ah, 3Fh
 	;int	21h
 	; 01/12/2024
-	;sys 	_read, [filehandle], esi
-	sys 	_read, [filehandle], edi ; edx = read count
+	;;sys 	_read, [filehandle], esi
+	;sys 	_read, [filehandle], edi ; edx = read count
+	; 14/12/2024
+	sys 	_read, [filehandle], edi, [loadsize]
 	
 	;mov	di, cs
 	;mov	ds, di
@@ -1678,6 +1691,9 @@ lff_4:
 
 	; 01/12/2024
 	xor	eax, eax
+lff_10:
+	; 14/12/2024
+	mov	ecx, [buffersize]
 	jmp	short lff_3
 
 ; entry ds:ax points to last byte in file
@@ -1686,6 +1702,7 @@ lff_4:
 ; destroys bx, cx
 ;
 padfill:
+	; 14/12/2024
 	; 01/12/2024 (TRDOS 386, 32bit registers)
 	; 17/11/2024
 	;   di = offset (to be filled with ZEROs)
@@ -1713,10 +1730,7 @@ padfill:
  	; 01/12/2024
 	; 25/11/2024
 	xor	eax, eax
-	cmp	byte [WAVE_BitsPerSample], 16
-	je	short padfill@
-	mov	al, 80h
-padfill@:
+	; 14/12/2024
 	rep	stosb
 	;mov	[fbs_off], di
 	;pop	di
@@ -6586,7 +6600,7 @@ UpdateFileInfo:
 	mov	ebx, esi
 chk4_nxt_sep:
 	lodsb
-	cmp	al, '\'
+	cmp	al, '/'	; 14/12/2024
 	je	short chg_fpos
 	and	al, al
 	jz	short chg_fpos_ok
@@ -6995,7 +7009,7 @@ tol_fill_c:
 Credits:
 	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
 	db	'December 2024.',10,13,0
-	db	'13/12/2024', 10,13
+	db	'14/12/2024', 10,13
 ; 15/11/2024
 reset:
 	db	0

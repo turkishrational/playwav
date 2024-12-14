@@ -5,7 +5,7 @@
 ;
 ; 29/05/2024
 ;
-; [ Last Modification: 08/12/2024 ]
+; [ Last Modification: 14/12/2024 ]
 ;
 ; Modified from PLAYWAV6.PRG .wav player program by Erdogan Tan, 27/11/2023
 ; Modified from PLAYWAV4.COM .wav player program by Erdogan Tan, 19/05/2024
@@ -942,8 +942,10 @@ lff_2:
 	; 26/11/2023
 	; load file into memory
 	sys 	_read, [FileHandle], esi
-	mov	ecx, edx
-	jc	short padfill ; error !
+	mov	ecx, [buffersize]
+	;jc	short padfill ; error !
+	; 14/12/2024
+	jc	short lff_10
 
 	and	eax, eax
 	jz	short padfill
@@ -953,8 +955,11 @@ lff_3:
 	and	bl, bl
 	jz	short lff_11
 
-	sub	ecx, eax
-	mov	ebp, ecx
+	; 14/12/2024
+	;sub	ecx, eax
+	;mov	ebp, ecx
+	; 14/12/2024
+	sub	edx, eax
 
 	;mov	esi, temp_buffer
 	;mov	edi, audio_buffer
@@ -992,26 +997,27 @@ lff_7:
 lff_8:
 	; 27/11/2023
 	clc
-	mov	ecx, ebp
-	jecxz	endLFF_retn
+	; 14/12/2024
+	;mov	ecx, ebp
+	;jecxz	endLFF_retn
+	or	edx, edx
+	jz	short endLFF_retn
 	
+	; 14/12/2024
+	mov	ecx, audio_buffer
+	add	ecx, [buffersize]
+	sub	ecx, edi
+
+	; 14/12/2024
+lff_10:
+	xor	eax, eax ; silence
 padfill:
-	cmp 	byte [bps], 16
-	je	short lff_10
-	; Minimum Value = 0
-        xor     al, al
-	rep	stosb
+	shr	ecx, 1 
+	rep	stosw
 lff_9:
         or	byte [flags], ENDOFFILE	; end of file flag
 endLFF_retn:
         retn
-lff_10:
-	xor	eax, eax
-	; Minimum value = 8000h (-32768)
-	shr	ecx, 1 
-	mov	ah, 80h ; ax = -32768
-	rep	stosw
-	jmp	short lff_9
 
 lff_11:
 	; 16 bit stereo
@@ -1200,7 +1206,9 @@ change_volume_level:
 dec_volume_level:
 	mov	cl, [volume_level]
 	cmp	cl, 1 ; 1
-	jna	short p_loop
+	;jna	short p_loop
+	; 14/12/2024
+	jna	short q_loop
 	dec	cl
 	jmp	short change_volume_level
 %endif
@@ -5419,7 +5427,7 @@ Credits:
 	db	'18/08/2020', 10,13,0
 	db	'27/11/2023', 10,13,0
 	db	'29/05/2024', 10,13,0
-	db	'08/12/2024', 10,13,0
+	db	'14/12/2024', 10,13,0
 
 msgAudioCardInfo:
 	db 	'for Intel AC97 (ICH) Audio Controller.', 10,13,0

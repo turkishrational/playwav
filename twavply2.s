@@ -5,7 +5,7 @@
 ;
 ; 09/12/2023
 ;
-; [ Last Modification: 08/12/2024 ]
+; [ Last Modification: 14/12/2024 ]
 ;
 ; Modified from: twavplay.s (VIA VT8237R WAV PLAYER & VGA DEMO) program
 ;	         by Erdogan Tan (24/08/2020) 
@@ -791,8 +791,11 @@ lff_2:
 	; 26/11/2023
 	; load file into memory
 	sys 	_read, [FileHandle], esi
-	mov	ecx, edx
-	jc	short padfill ; error !
+	; 14/12/2024
+	mov	ecx, [buffersize]
+	;jc	short padfill ; error !
+	; 14/12/2024
+	jc	short lff_10
 
 	and	eax, eax
 	jz	short padfill
@@ -802,8 +805,11 @@ lff_3:
 	and	bl, bl
 	jz	short lff_11
 
-	sub	ecx, eax
-	mov	ebp, ecx
+	; 14/12/2024
+	;sub	ecx, eax
+	;mov	ebp, ecx
+	; 14/12/2024
+	sub	edx, eax
 
 	;mov	esi, temp_buffer
 	;mov	edi, audio_buffer
@@ -841,26 +847,27 @@ lff_7:
 lff_8:
 	; 27/11/2023
 	clc
-	mov	ecx, ebp
-	jecxz	endLFF_retn
-	
+	; 14/12/2024
+	;mov	ecx, ebp
+	;jecxz	endLFF_retn
+	or	edx, edx
+	jz	short endLFF_retn
+
+	; 14/12/2024
+	mov	ecx, audio_buffer
+	add	ecx, [buffersize]
+	sub	ecx, edi
+
+	; 14/12/2024
+lff_10:
+	xor	eax, eax ; silence
 padfill:
-	cmp 	byte [bps], 16
-	je	short lff_10
-	; Minimum Value = 0
-        xor     al, al
-	rep	stosb
+	shr	ecx, 1
+	rep	stosw
 lff_9:
         or	byte [flags], ENDOFFILE	; end of file flag
 endLFF_retn:
         retn
-lff_10:
-	xor	eax, eax
-	; Minimum value = 8000h (-32768)
-	shr	ecx, 1 
-	mov	ah, 80h ; ax = -32768
-	rep	stosw
-	jmp	short lff_9
 
 lff_11:
 	; 16 bit stereo
@@ -952,19 +959,27 @@ _6:
 	; the 2nd half of dma buffer is ready but the 1st half
 	; must be filled again.)
 
-	; 27/07/2020
+; 14/12/2024
+%if 0
+	; 18/08/2020
 	test    byte [flags], ENDOFFILE  ; end of file
 	jnz	short p_loop ; yes
 
-	; 13/10/2017
+	; 18/08/2020
+	; load 32768 bytes into audio buffer
+	;; (for the second half of DMA buffer)
+	; 27/11/2023
+	; 20/05/2017
 	;mov	edi, audio_buffer
 	;mov	edx, BUFFERSIZE
-	; 09/12/2023
+	; 26/11/2023
 	;mov	edx, [buffersize]
 	;call	loadFromFile
+	; 26/11/2023
 	call	dword [loadfromwavfile]
 	;jc	short p_return
 	;mov	byte [half_buff], 2 ; (DMA) Buffer 2
+%endif
 
 	; we need to wait for 'SRB' (audio interrupt)
 	; (we can not return from 'PlayWav' here 
@@ -1008,6 +1023,13 @@ modp_gs:
 	;mov	edx, [buffersize]
 	call	dword [loadfromwavfile]
 	jc	short q_return
+
+	; 14/12/2024
+	;;;
+	; bh = 16 : update (current, first) dma half buffer
+	; bl = 0  : then switch to the other half buffer
+	sys	_audio, 1000h
+	;;;
 
 	; 23/08/2020
 	jmp	r_loop
@@ -1525,6 +1547,7 @@ lff44_3:
 lff22_3:
 lff11_3:
 	; 08/12/2024 (BugFix)
+	; 01/06/2024 (BugFix)
 	mov	ecx, [buffersize] ; 16 bit (48 kHZ, stereo) sample size
 	;shl	ecx, 1	; byte count ; Bug !
 	; 08/12/2024
@@ -1536,8 +1559,9 @@ lff11_3:
 	xor	eax, eax ; fill (remain part of) buffer with zeros
 	rep	stosd
 lff8m_4:
-	; 08/12/2024 (BugFix)
+	; 01/06/2024 (BugFix)
 	; cf=1 ; Bug !
+	; 08/12/2024
 	;clc
 	retn
 
@@ -4822,7 +4846,8 @@ credits_zero:
 	db	'usage: twavplay filename.wav',10,13,0
 	db	'24/08/2020',10,13,0
 	db	'09/12/2023',10,13,0
-	db	'08/12/2024',10,13,0
+	;db	'08/12/2024',10,13,0
+	db	'14/12/2024',10,13,0
 
 noDevMsg:
 	; 09/12/2023
