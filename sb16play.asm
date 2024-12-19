@@ -5,7 +5,7 @@
 ;
 ; 29/11/2024
 ;
-; [ Last Modification: 07/12/2024 ]
+; [ Last Modification: 18/12/2024 ]
 ;
 ; Modified from PLAYWAV9.COM .wav player program by Erdogan Tan, 27/11/2024
 ;
@@ -103,8 +103,9 @@ Player_InitalizePSP:
 	jmp	pmsg_usage
 
 Player_ParseParameters:
+	; 18/12/2024
 	; 29/11/2024
-	mov	dx, wav_file_name
+	;mov	dx, wav_file_name
 	cmp	byte [IsInSplash], 0
 	jna	short check_p_command
 
@@ -1212,8 +1213,8 @@ setFree:
 	; 24/11/2024 (SB16 version of playwav8.asm -> playwav9.asm)
 	; 30/05/2024 (ich_wav4.asm, 19/05/2024)
 loadFromFile:
-	; 26/11/2024
-	mov	[count], ax ; 0
+	; 18/12/2024
+	mov	word [count], 0
 
 	; 07/11/2023
         test    byte [flags], ENDOFFILE	; have we already read the
@@ -2641,7 +2642,7 @@ p_msg_x:
 Credits:
 	db	'Tiny WAV Player for Retro DOS by Erdogan Tan. '
 	db	'December 2024.',10,13,0
-	db	'07/12/2024', 10,13,0
+	db	'18/12/2024', 10,13,0
 
 msgAudioCardInfo:
 	db 	'for Sound Blaster 16 audio device.', 10,13,0

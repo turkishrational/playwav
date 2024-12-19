@@ -5,7 +5,7 @@
 ;
 ; 30/11/2024
 ;
-; [ Last Modification: 14/12/2024 ]
+; [ Last Modification: 18/12/2024 ]
 ;
 ; Modified from AC97PLAY.COM .wav player program by Erdogan Tan, 29/11/2024
 ;
@@ -169,11 +169,24 @@ Player_InitalizePSP:
 Player_ParseParameters:
 	; 30/11/2024
 	; 29/11/2024
-	mov	edx, wav_file_name
+	; 18/12/2024
+	;mov	edx, wav_file_name
+	
 	cmp	byte [IsInSplash], 0
 	jna	short check_p_command
 
 	call	write_audio_dev_info
+
+	;;;
+	; 18/12/2024
+vbuffer_map:
+	; 01/12/2024
+	; Map video buffer (0B8000h) to user memory (same addr)
+	sys	_video, 0400h
+	
+	cmp	eax, 0B8000h
+	jne	short jmp_Player_Quit ; terminate without error msg
+	;;;
 
 	mov	edx, SplashFileName
 	jmp	short _1
@@ -424,7 +437,7 @@ wleds_sa_2:
 	;;; wait for 3 seconds
 	sys	_time, 0 ; get time in unix epoch format
 	mov	ecx, eax
-	add	ecx, 3
+	add	ecx, 2 ; wait for 2 seconds ; 18/12/2024
 _wait_3s:
 	nop
 	sys	_time, 0
@@ -728,11 +741,17 @@ PlayNow:
 	;;call	SetMasterVolume
 	;call	SetPCMOutVolume
 
-	; 29/11/2024
-	cmp	byte [IsInSplash], 0
-	;ja	short PlayNow@
-	; 02/12/2024
-	jna	short PlayNow@
+	;;;
+	; 18/12/2024
+	cmp	dword [_bdl_buffer], 0
+	ja	short PlayNow@
+	;
+	;; 29/11/2024
+	;cmp	byte [IsInSplash], 0
+	;;ja	short PlayNow@
+	;; 02/12/2024
+	;jna	short PlayNow@
+	;;;
 
 ;PlayNow@:
 	; 28/11/2024
@@ -748,7 +767,8 @@ PlayNow:
 	; 02/12/2024
 PlayNow@:
 	; reset file loading and EOF parameters
-	;mov	dword [count], 0
+	; 18/12/2024
+	mov	dword [count], 0
 	mov	dword [LoadedDataBytes], 0
 	mov	byte [flags], 0
 	mov	byte [stopped], 0
@@ -932,6 +952,9 @@ RePlayWav:
 	mov	eax, [count]
 	add	[LoadedDataBytes], eax
 
+	; 18/12/2024
+	mov	dword [count], 0
+
 	; and 64k into buffer 2
 	mov	edi, WAVBUFFER_2
 	call	dword [loadfromwavfile]
@@ -1028,9 +1051,7 @@ sL0:
 
 	; 28/11/2024
 	cmp	byte [IsInSplash], 0
-	;jna	short tuneLoop
-	; 01/12/2024
-	jna	short vbuffer_map
+	jna	short tuneLoop	; 18/12/2024
 
 sL1:
 	call	updateLVI	; /set LVI != CIV/
@@ -1078,16 +1099,6 @@ sL3:
 	;mov	byte [flags], 0
 
 	retn
-
-vbuffer_map:
-	; 01/12/2024
-	; Map video buffer (0B8000h) to user memory (same addr)
-	sys	_video, 0400h
-	
-	cmp	eax, 0B8000h
-	;jne	Player_Quit
-	; 02/12/2024 ('pop' is correct but it is not necessary)
-	jne	Player_Quit@ ; pop eax ; return address
 
 	; 01/12/2024 (32bit)
 	; 29/11/2024
@@ -6253,8 +6264,8 @@ p_2:
         ;call   delay1_4ms
         ;call   delay1_4ms
 _cksr:		; 19/05/2024
-	; 18/11/2024
-	xor	ax, ax
+	; 18/12/2024
+	xor	eax, eax
 	;clc
 p_3:
 	retn
@@ -7009,7 +7020,7 @@ tol_fill_c:
 Credits:
 	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
 	db	'December 2024.',10,13,0
-	db	'14/12/2024', 10,13
+	db	'18/12/2024', 10,13
 ; 15/11/2024
 reset:
 	db	0

@@ -5,7 +5,7 @@
 ;
 ; 14/11/2024
 ;
-; [ Last Modification: 14/12/2024 ]
+; [ Last Modification: 18/12/2024 ]
 ;
 ; Modified from PLAYWAV7.COM .wav player program by Erdogan Tan, 13/11/2024
 ;
@@ -630,6 +630,8 @@ RePlayWav:
 	mov	ax, [count]
 	add	[LoadedDataBytes], ax
 	adc	word [LoadedDataBytes+2], 0
+	; 18/12/2024
+	mov	word [count], 0
 
 	; and 64k into buffer 2
 	mov     ax, [WAV_BUFFER2]
@@ -6174,7 +6176,7 @@ p_msg_x:
 Credits:
 	db	'Tiny WAV Player for Retro DOS by Erdogan Tan. '
 	db	'December 2024.',10,13,0
-	db	'14/12/2024', 10,13
+	db	'18/12/2024', 10,13
 ; 15/11/2024
 reset:
 	db	0

@@ -5,7 +5,7 @@
 ;
 ; 07/12/2024
 ;
-; [ Last Modification: 14/12/2024 ]
+; [ Last Modification: 18/12/2024 ]
 ;
 ; Modified from PLAYWAV9.COM .wav player program by Erdogan Tan, 27/11/2024
 ;		AC97PLAY.COM (ac97play.asm) - 29/11/2024
@@ -799,6 +799,9 @@ RePlayWav:
 	; bh = 16 : update (current, first) dma half buffer
 	; bl = 0  : then switch to the next (second) half buffer
 	sys	_audio, 1000h
+
+	; 18/12/2024
+	mov	dword [count], 0
 
 	; 07/12/2024
 	mov	edi, audio_buffer
@@ -4852,8 +4855,8 @@ p_2:
         ;call   delay1_4ms
         ;call   delay1_4ms
 _cksr:		; 19/05/2024
-	; 18/11/2024
-	xor	ax, ax
+	; 18/12/2024
+	xor	eax, eax
 	;clc
 p_3:
 	retn
@@ -5527,7 +5530,7 @@ tol_fill_c:
 Credits:
 	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
 	db	'December 2024.',10,13,0
-	db	'14/12/2024', 10,13
+	db	'18/12/2024', 10,13
 ; 15/11/2024
 reset:
 	db	0

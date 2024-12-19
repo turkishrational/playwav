@@ -5,7 +5,7 @@
 ;
 ; 28/11/2024
 ;
-; [ Last Modification: 14/12/2024 ]
+; [ Last Modification: 18/12/2024 ]
 ;
 ; Modified from PLAYWAV8.COM .wav player program by Erdogan Tan, 25/11/2024
 ;
@@ -104,7 +104,8 @@ Player_InitalizePSP:
 
 Player_ParseParameters:
 	; 29/11/2024
-	mov	dx, wav_file_name
+	; 18/12/2024
+	;mov	dx, wav_file_name
 	cmp	byte [IsInSplash], 0
 	jna	short check_p_command
 
@@ -625,6 +626,16 @@ vra_err:
 ;	dd	32768 ; 16 bit samples (not bytes)
 
 PlayNow:
+	;;;
+	; 14/11/2024
+	;mov	al, 3	; 0 = max, 31 = min
+	; 14/12/2024
+	mov	al, [volume]
+	call	SetPCMOutVolume@
+	; 15/11/2024
+	;;call	SetMasterVolume
+	;call	SetPCMOutVolume
+
 	; 29/11/2024
 	cmp	byte [IsInSplash], 0
 	;ja	short PlayNow@
@@ -632,13 +643,6 @@ PlayNow:
 	jna	short PlayNow@
 
 ;PlayNow@:
-	;;;
-	; 14/11/2024
-	mov	al, 3	; 0 = max, 31 = min
-	; 15/11/2024
-	;call	SetMasterVolume
-	call	SetPCMOutVolume
-
 	; 28/11/2024
 	;cmp	byte [IsInSplash], 0
 	;ja	short _3
@@ -785,8 +789,9 @@ _0:
         loop    _0
         pop     es
 
+	; 18/12/2024
+	mov	word [count], cx ; 0
 	; 14/11/2024
-	;mov	word [count], cx ; 0
 	;mov	dword [LoadedDataBytes], 0
 
 	; 19/11/2024
@@ -5837,7 +5842,8 @@ setLastValidIndex:
 
 ; 29/05/2024
 ; 19/05/2024
-volume: db	02h
+volume: ;db	02h
+	db	03h ; 14/12/2024 
 
 ; --------------------------------------------------------
 
@@ -6434,7 +6440,7 @@ p_msg_x:
 Credits:
 	db	'Tiny WAV Player for Retro DOS by Erdogan Tan. '
 	db	'December 2024.',10,13,0
-	db	'14/12/2024', 10,13
+	db	'18/12/2024', 10,13
 ; 15/11/2024
 reset:
 	db	0
