@@ -1465,9 +1465,9 @@ c4ue_cpt_@:
 
 	; 23/11/2024
 c4ue_uvb:
-	; 16/12/2024
-	;cmp	byte [wleds], 0
-	;jna	short c4ue_vb_ok
+	; 20/12/2024
+	cmp	byte [wleds], 0
+	jna	short c4ue_vb_ok
 
 	call	UpdateWaveLeds
 
