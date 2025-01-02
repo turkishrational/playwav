@@ -45,3 +45,5 @@ Command: PLAYWAV2 FILE.WAV (PLAYWAV2 C:\WAV\FILENAME.WAV)
 
 ***
 Youtube demo: https://youtu.be/m6dSEDTjoaQ www.youtube.com/@erdogantan
+              https://youtu.be/I6ccqIZ8xuQ?si=AAQnExAc7abeziFr
+              
