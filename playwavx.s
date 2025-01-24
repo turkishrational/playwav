@@ -5,7 +5,7 @@
 ;
 ; 24/11/2024
 ;
-; [ Last Modification: 20/12/2024 ]
+; [ Last Modification: 23/01/2025 ]
 ;
 ; Modified from PLAYWAV9.COM .wav player program by Erdogan Tan, 18/12/2024
 ;               PLAYWAV9.PRG, 18/12/2024
@@ -1919,6 +1919,7 @@ clear_window_@:
 
 ; --------------------------------------------------------
 
+	; 23/01/2025
 	; 16/12/2024 (sb16play.s, TRDOS 386)
 	; 	     (DMA buffer monitoring/tracking)
 	; 09/12/2024 (ac97play.s)
@@ -1937,6 +1938,8 @@ turn_on_leds_stereo_16bit:
 tol_fill_c:
 	lodsw	; left
 	;shr	ax, 8
+	; 23/01/2025
+	add	ah, 80h
 	mov	edx, eax
 	lodsw	; right
 	;shr	ax, 8
@@ -1950,9 +1953,14 @@ tol_fill_c:
 	;shr	ax, 6
 	;;;
 	; 09/12/2024
-	add	ax, dx
+	;add	ax, dx
+	;add	ah, 80h
+	;shr	eax, 13
+	; 23/01/2025
 	add	ah, 80h
-	shr	eax, 13
+	add	eax, edx  ; L+R	
+	shr	eax, 14	; 8 volume levels
+
 	; eax = 0 to 7 ; 18/12/2024
 	;;;
 	push	ebx
@@ -1992,7 +2000,7 @@ tol2_fill_c:
 	;add	al, 80h
 	;shr	eax, 5
 	add	ah, 80h
-	shr	eax, 13
+	shr	eax, 13	; 8 volume levels
 	; eax = 0 to 7 ; 18/12/2024
 	;;;
 	push	ebx
@@ -2013,6 +2021,7 @@ tol2_fill_c:
 
 	retn
 
+	; 23/01/2025
 	; 24/11/2024
 turn_on_leds_stereo_8bit:
 	; 16/12/2024
@@ -2024,12 +2033,22 @@ turn_on_leds_stereo_8bit:
 	; eax = 0 
 
 tol3_fill_c:
-	lodsw	; left (al), right (ah)
-	add	al, ah
-	add	al, 80h
-	xor	ah, ah
-	;shr	ax, 6
-	shr	eax, 5
+	;lodsw	; left (al), right (ah)
+	;add	al, ah
+	;add	al, 80h
+	;xor	ah, ah
+	;;shr	ax, 6
+	;shr	eax, 5
+	; 23/01/2025
+	xor	eax, eax ; 0
+	lodsb	; left
+	mov	edx, eax
+	lodsb	; right
+	add	eax, edx
+	shr	eax, 1 ; (L+R/2)
+	sub	al, 255	; max. value will be shown on top
+	shr	eax, 5	; 8 volume levels
+
 	; eax = 0 to 7 ; 18/12/2024
 	push	ebx
 	;shl	ax, 1
@@ -2047,6 +2066,7 @@ tol3_fill_c:
 
 	retn
 
+	; 23/01/2025
 	; 24/11/2024
 	; 23/11/2024
 turn_on_leds_mono_8bit:
@@ -2059,11 +2079,17 @@ turn_on_leds_mono_8bit:
 	; eax = 0
 
 tol4_fill_c:
+	;lodsb
+	;xor	ah, ah
+	;; 16/12/2024
+	;;add	al, 80h
+	;shr	eax, 5
+	; 23/01/2025
+	xor	eax, eax ; 0
 	lodsb
-	xor	ah, ah
-	; 16/12/2024
-	;add	al, 80h
-	shr	eax, 5
+	sub	al, 255	; max. value will be shown on top
+	shr	eax, 5  ; 8 volume levels	
+
 	; eax = 0 to 7 ; 18/12/2024
 	push	ebx
 	;shl	ax, 1
@@ -2121,8 +2147,10 @@ g_gdata_parms_2:
 
 Credits:
 	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
-	db	'December 2024.',10,13,0
+	;db	'December 2024.',10,13,0
+	db	'January 2025.',10,13,0
 	db	'20/12/2024', 10,13,0
+	db	'23/01/2025', 10,13,0
 
 msgAudioCardInfo:
 	db 	'for Sound Blaster 16 audio device.', 10,13,0

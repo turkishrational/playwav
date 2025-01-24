@@ -5,7 +5,7 @@
 ;
 ; 07/12/2024
 ;
-; [ Last Modification: 17/01/2025 ]
+; [ Last Modification: 23/01/2025 ]
 ;
 ; Modified from PLAYWAV9.COM .wav player program by Erdogan Tan, 27/11/2024
 ;		AC97PLAY.COM (ac97play.asm) - 29/11/2024
@@ -5446,6 +5446,7 @@ UpdateWaveLeds:
 
 ; --------------------------------------------------------
 
+	; 23/01/2025
 	; 09/12/2024
 	; 01/12/2024 (TRDOS 386, 32bit registers, flat memory)
 	; 23/11/2024 (Retro DOS, 16bit registers, segmented)
@@ -5511,6 +5512,8 @@ tol_buf_@:
 tol_fill_c:
 	lodsw	; left
 	;shr	ax, 8
+	; 23/01/2025
+	add	ah, 80h
 	mov	edx, eax
 	lodsw	; right
 	;shr	ax, 8
@@ -5521,12 +5524,16 @@ tol_fill_c:
 	;add	al, 80h
 	;shr	eax, 5
 	;;;
-	;;shr	ax, 6
+	;shr	ax, 6
 	;;;
 	; 09/12/2024
-	add	ax, dx
+	;add	ax, dx
+	;add	ah, 80h
+	;shr	eax, 13
+	; 23/01/2025
 	add	ah, 80h
-	shr	eax, 13
+	add	eax, edx  ; L+R	
+	shr	eax, 14	; 8 volume levels
 	;;;
 	push	ebx
 	;shl	ax, 1
@@ -5557,8 +5564,9 @@ Credits:
 	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
 	;db	'December 2024.', 10,13,0
 	db	'January 2025.', 10,13,0
-	;db	'18/12/2024', 10,13
-	db	'17/01/2025', 10,13
+	;;db	'18/12/2024', 10,13
+	;db	'17/01/2025', 10,13
+	db	'23/01/2025', 10,13
 ; 15/11/2024
 reset:
 	db	0

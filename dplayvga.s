@@ -5,7 +5,7 @@
 ;
 ; 21/12/2024
 ;
-; [ Last Modification: 22/12/2024 ]
+; [ Last Modification: 23/01/2025 ]
 ;
 ; Modified from PLAYWAV9.PRG .wav player program by Erdogan Tan, 18/12/2024
 ;
@@ -5849,12 +5849,17 @@ tol_buf_@:
 tol_fill_c:
 	xor	eax, eax ; 0 ; 22/12/2024
 	lodsw	; left
+	; 23/01/2025
+	add	ah, 80h
 	mov	edx, eax
 	lodsw	; right
-	add	ax, dx
+	;add	ax, dx
 	add	ah, 80h
 	; 21/12/2024 (16 volume levels)
-	shr	eax, 12
+	;shr	eax, 12
+	; 23/01/2025
+	add	eax, edx ; L+R
+	shr	eax, 13	; (L+R)/2 & 16 volume levels 
 
 	push	ebx ; *
 	; 01/12/2024
@@ -5999,8 +6004,9 @@ Credits:
 	db 'VGA WAV Player for TRDOS 386 by Erdogan Tan. '
 	;db 'December 2024.', 10,13,0
 	db 'January 2025.', 10,13,0
-	;db '22/12/2024', 10,13
-	db '17/01/2025', 10,13
+	;;db '22/12/2024', 10,13
+	;db '17/01/2025', 10,13
+	db '23/01/2025', 10,13
 ; 15/11/2024
 reset:
 	db 0
