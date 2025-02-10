@@ -5,13 +5,13 @@
 ;
 ; 07/03/2017
 ;
-; [ Last Modification: 20/10/2017 ]
+; [ Last Modification: 10/02/2025 ] (previous modification: 20/10/2017)
 ;
 ; Modified from TINYPLAY.PRG .mod player program by Erdogan Tan, 04/03/2017 
 ;
 ; Derived from source code of 'PLAYWAV.COM' ('PLAYWAV.ASM') by Erdogan Tan
 ;	      (17/02/2017) 
-; Assembler: NASM version 2.11
+; Assembler: NASM version 2.11 (2.16, 2025)
 ;	     nasm playwav.s -l playwav.txt -o PLAYWAV.PRG	
 ; ----------------------------------------------------------------------------
 ; Derived from '.wav file player for DOS' Jeff Leyda, Sep 02, 2002
@@ -228,7 +228,8 @@ error_exit:
 	jmp	short Exit
 
 DetectSb:
-	pushad
+	; 10/02/2025
+	;pushad
 ScanPort:
 	mov     bx, 210h	; start scanning ports
 		; 210h, 220h, .. 260h
@@ -335,7 +336,7 @@ IrqOk:
 	;mov	al, 20h
 	;;out	20h, al	; Hardware acknowledge.
 	;mov	ah,1  ; outb
-	;int	34h	
+	;int	34h
 
 RestoreIrqs:
 	; UNLINK SIGNAL RESPONSE/RETURN BYTE FROM REQUESTED IRQ
@@ -363,7 +364,7 @@ Success:
 
 	sys	_msg, MsgFound, 255, 0Fh
 
-	popad	; Return to caller.
+	;popad	; Return to caller.
 	retn
 
 Fail:  
@@ -478,13 +479,16 @@ ENDOFFILE       equ     1		; flag for knowing end of file
 %endmacro
 
 SbInit:
-	pushad
+	;pushad
 
 SetBuffer:
 	;mov	byte [DmaFlag], 0
 	; 10/03/2017
 	mov	ebx, [DMA_phy_buff] ; physical addr of DMA buff
 	mov     ecx, DmaBufSize
+
+	; 10/02/2025
+	mov     edi, DmaBuffer  ; virtual addr of DMA buff
 
 	cmp	byte [bps], 16
 	jne	short _0 ; set 8 bit DMA buffer
@@ -563,7 +567,16 @@ SetBuffer:
 	;mov	ah, 1  ;outb
 	int	34h
 
-	jmp	short ClearBuffer
+	;jmp	short ClearBuffer
+
+	; 10/02/2025 (16bit audio data)
+	;mov	edi, DmaBuffer
+	inc	ecx
+	xor	eax, eax ; 0
+	;cld
+	rep	stosw
+	jmp	short SetIrq
+
 _0:  
 	dec     ecx ; 20/10/2017
   
@@ -626,6 +639,7 @@ _0:
 	;mov	ah, 1  ;outb
 	int	34h
 
+	; 10/02/2025 (8bit audio data)
 ClearBuffer:
 	mov     edi, DmaBuffer  ; virtual addr of DMA buff
 	;mov	ecx, DmaBufSize
@@ -633,6 +647,7 @@ ClearBuffer:
 	mov     al, 80h
 	;cld
 	rep     stosb
+
 SetIrq:
 	; CALLBACK method
 	mov	bl, [SbIrq] ; IRQ number
@@ -668,7 +683,10 @@ ResetDsp:
 	inc	ah ; ah = 1 ;outb
 	int	34h
 
-	mov     cx, 100
+	;mov	cx, 100
+	; 10/02/2025
+	mov	cl, 100
+	 ;ecx = 100
 	sub	ah, ah ; 0
 WaitId:         
 	mov     dx, [SbAddr]
@@ -679,7 +697,9 @@ WaitId:
 	or      al, al
 	js      short sb_GetId
 	loop    WaitId
-	jmp     sb_Exit
+	;jmp	sb_Exit
+	; 10/02/2025
+	retn
 sb_GetId:
 	mov     dx, [SbAddr]
 	add     dx, 0Ah
@@ -689,7 +709,9 @@ sb_GetId:
 	cmp     al, 0AAh
 	je      short SbOk
 	loop    WaitId
-	jmp	sb_Exit
+	;jmp	sb_Exit
+	; 10/02/2025
+	retn
 SbOk:
 	mov     dx, [SbAddr]
 	add     dx, 0Ch
@@ -706,7 +728,7 @@ SbOk:
 	sub	dx, 0Ch-04h
 	mov	al, 22h ; master volume
 	int	34h
-	inc	dx
+	inc	edx ; 10/02/2025	
 	mov	al, 0FFh ; maximum volume level
 	int	34h
 	add	dx, 0Ch-05h
@@ -728,7 +750,8 @@ _1:
 	jb	short _2
 	add	bh, 20h	; 16 bit stereo (30h)
 	; 20/10/2017
-	shr	cx, 1 ; byte count -> word count
+	; 10/02/2025
+	shr	ecx, 1 ; byte count -> word count
 _2:     
 	; PCM output (8/16 bit mono autoinitialized transfer)
 	SbOut   bl ; bCommand
@@ -738,7 +761,7 @@ _2:
 	;dec	bx  ; wBlkSize is one less than the actual size 
 	;SbOut	bl
 	;SbOut	bh
-	dec	cx
+	dec	ecx ; 10/02/2025
 	SbOut	cl
 	SbOut	ch	
 
@@ -779,7 +802,7 @@ _2:
 	;SbOut	0F0h  ; Max. Bass value is 15 (15*16)	
 
 sb_Exit:           
-	popad
+	;popad
 	retn
 
 SbIrqHandler:  ; SoundBlaster IRQ Callback service for TRDOS 386
@@ -843,7 +866,8 @@ SbIrqHandler_release:
 	sys	_rele ; return from callback service
 
 SbPoll:	;  Sound Blaster Polling.
-	pushad
+	; 10/02/2025
+	;pushad
 
 	; 10/03/2017
 	cmp	byte [iStatus], 0
@@ -867,7 +891,7 @@ FirstHalf: ; write to the first half
 	call    loadFromFile
 	jc	short sbPoll_stop
 Bye:
-	popad
+	;popad
 	retn
 
 sbPoll_stop:
@@ -885,10 +909,13 @@ _6:
 	SbOut	bl ; exit auto-initialize transfer command
 
 	mov	byte [tLoop], 0
-	jmp	short Bye
+	;jmp	short Bye
+	; 10/02/2025
+	retn
 
 SbDone:
-	pushad
+	; 10/02/2025
+	;pushad
 
 	mov     bl, [SbIrq] ; IRQ number
 	sub	bh, bh ; 0 = Unlink IRQ from user
@@ -899,7 +926,7 @@ SbDone:
 	SbOut   0D0h
 	SbOut   0D3h
 
-	popad
+	;popad
 	retn
 
 loadFromFile:
@@ -925,8 +952,10 @@ loadFromFile:
 padfill:
 	cmp 	byte [bps], 16
 	je	short _8
-	 ;Minmum Value = 0
-        xor     al, al
+	; Minimum Value = 0
+	;xor     al, al
+	; 10/02/2025 
+	mov	al, 80h ; silence, middle point
 	rep	stosb
 _7:
         ;clc			; don't exit with CY yet.
@@ -940,7 +969,9 @@ endLFF:
 _8:
 	; Minimum value = 8000h (-32768)
 	shr	ecx, 1 
-	mov	ax, 8000h ; -32768
+	;mov	ax, 8000h ; -32768
+	; 10/02/2025 
+	xor	eax, eax ; 0 ; silence, middle point
 	rep	stosw
 	jmp	short _7
 
@@ -955,7 +986,8 @@ tuneLoop:
 	mov	esi, 0B8000h
 	mov	al, [DmaFlag]
 	mov	ah, 4Eh
-	and	al, 1
+	; 10/02/2025
+	;and	al, 1
 	add	al, '1'
 	mov	[esi], ax ; show current play buffer (1, 2)
 	
@@ -998,10 +1030,13 @@ SbIrq:
 
 msg_usage:
 	db	'usage: playwav filename.wav',10,13,0
-	db	'20/10/2017'
+	db	'20/10/2017',0
+	db	'10/02/2025',0
 
 Credits:
-	db	'Tiny WAV Player by Erdogan Tan. October 2017.'
+	db	'Tiny WAV Player by Erdogan Tan. '
+	;db 	'October 2017.'
+	db	'February 2025.'
 	db	10,13,0
 noFileErrMsg:
 	db	'Error: file not found.',10,13,0
