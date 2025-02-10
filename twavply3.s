@@ -770,6 +770,7 @@ SB16_TuneLoop:
 c4ue_ok:
 	retn
 
+	; 10/02/2025
 	; 09/02/2025
 checkUpdateEvents:
 	call	check4keyboardstop
@@ -798,8 +799,8 @@ c4ue_chk_ps:
 	jmp	short c4ue_cpt
 
 c4ue_replay:
-	pop	ax ; *
-	pop	ax ; return address
+	pop	eax ; *
+	pop	eax ; return address
 
 	call	move_to_beginning
 
