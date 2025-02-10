@@ -5,7 +5,7 @@
 ;
 ; 15/12/2024
 ;
-; [ Last Modification: 23/01/2025 ]
+; [ Last Modification: 05/02/2025 ]
 ;
 ; Modified from SB16PLAY.COM .wav player program by Erdogan Tan, 18/12/2024
 ;		PLAYWAV9.PRG, 18/12/2024
@@ -1048,6 +1048,7 @@ _cf1:
 ; ac97play.s
 ; --------------------------------------------
 
+	; 05/02/2025
 	; 01/12/2024
 	; 14/11/2024 - Erdogan Tan
 getWAVParameters:
@@ -1075,8 +1076,17 @@ getWAVParameters:
 	jne	short gwavp_stc_retn
 
 	cmp	word [WAVE_AudioFormat], 1 ; Offset 20, must be 1 (= PCM)
-	;jne	short gwavp_stc_retn
-	je	short gwavp_retn ; 15/11/2024
+	; 05/02/2025
+	jne	short gwavp_stc_retn
+	;je	short gwavp_retn ; 15/11/2024
+
+	; 05/02/2025
+	; (Open MPT creates wav files with a new type header,
+	;  this program can not use the new type
+	;  because of 'data' offset is not at DATA_SubchunkID.)
+	; ((GoldWave creates common type wav file.))
+	cmp	dword [DATA_SubchunkID], 'data'
+	je	short gwavp_retn
 
 	; 15/11/2024
 	;mov	cx, [WAVE_NumChannels]	; return num of channels in CX
@@ -2341,10 +2351,12 @@ g_gdata_parms_2:
 
 Credits:
 	db	'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
-	;db	'December 2024.',10,13,0
-	db	'January 2025.',10,13,0
+	;;db	'December 2024.',10,13,0
+	;db	'January 2025.',10,13,0
+	db	'February 2025.',10,13,0
 	db	'20/12/2024', 10,13,0
 	db	'23/01/2025', 10,13,0
+	db	'05/02/2025', 10,13,0
 
 msgAudioCardInfo:
 	db 	'for Sound Blaster 16 audio device.', 10,13,0
