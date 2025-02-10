@@ -477,7 +477,7 @@
    365                                  
    366                                  	; AC97
    367                                  
-   368                                  	sys	_alloc, BDL_BUFFER, 33*4096, 0	; no upper limit
+   368                                  	sys	_alloc, BDL_BUFFER, 7*4096, 0	; no upper limit
     82                              <1> 
     83                              <1> 
     84                              <1> 
@@ -485,7 +485,7 @@
     86                              <1>  %if %0 >= 2
     87 00000182 BB[00900000]        <1>  mov ebx, %2
     88                              <1>  %if %0 >= 3
-    89 00000187 B900100200          <1>  mov ecx, %3
+    89 00000187 B900700000          <1>  mov ecx, %3
     90                              <1>  %if %0 = 4
     91 0000018C BA00000000          <1>  mov edx, %4
     92                              <1>  %endif

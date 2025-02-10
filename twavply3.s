@@ -365,7 +365,7 @@ allocate_ac97_buffers:
 
 	; AC97
 
-	sys	_alloc, BDL_BUFFER, 33*4096, 0	; no upper limit
+	sys	_alloc, BDL_BUFFER, 7*4096, 0	; no upper limit
 	jc	short syscall_err
 
 	mov	[_bdl_buffer], eax ; BDL_BUFFER physical address
