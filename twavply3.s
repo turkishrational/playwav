@@ -5,7 +5,7 @@
 ;
 ; 09/02/2025
 ;
-; [ Last Modification: 10/02/2025 ]
+; [ Last Modification: 20/02/2025 ]
 ;
 ; Assembler: NASM 2.15
 ; ----------------------------------------------------------------------------
@@ -206,7 +206,8 @@ a_1:
 	and	ah, ah
 	jz	short a_2
 
-	cmp	al, '\'
+	; 20/02/2025
+	cmp	al, '/'
 	jne	short a_2
 	mov	ah, 0
 a_2:
@@ -4573,7 +4574,7 @@ wsr_1:
 	sys	_msg, esi, 255, 0Fh
 
 	mov	esi, msgMono
-	cmp	byte [WAVE_BitsPerSample], 1
+	cmp	byte [WAVE_NumChannels], 1
 	je	short wsr_2
 	mov	esi, msgStereo
 wsr_2:
@@ -6812,7 +6813,8 @@ sb16_gcd_3:
 	; ecx = load (source) count
 	; edi = g_buffer
 
-	jmp	word [sound_data_copy]
+	; 15/02/2025
+	jmp	dword [sound_data_copy]
 
 ;-----------------------------------------------------------------------------
 
@@ -6922,9 +6924,9 @@ sdc_8bs_loop:
 	; 10/02/2025
 	; 09/02/2025 - twavplay.asm (16bit
 sdc_8bit_mono:
-	; si = dma buffer offset
-	; cx = load (source) count = 256
-	; di = g_buffer
+	; esi = dma buffer offset
+	; ecx = load (source) count = 256
+	; edi = g_buffer
 
 	; convert to 16 bit sample
 sdc_8bm_loop:
@@ -7204,7 +7206,7 @@ FileHandle:	dd -1
 
 Credits:	db 'Tiny WAV Player for TRDOS 386 by Erdogan Tan. '
 		db 'February 2025.',10,13,0
-		db '09/02/2025',10,13
+		db '20/02/2025',10,13
 reset:		db 0
 
 msg_usage:	db 10,13
